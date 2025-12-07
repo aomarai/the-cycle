@@ -197,12 +197,18 @@ public class WorldDeletionService {
         Path src = worldFolder.toPath();
         Path dst = tempFolder.toPath();
         
+        // Ensure destination doesn't exist (UUID collision is extremely unlikely, but check for safety)
+        if (tempFolder.exists()) {
+            plugin.getLogger().warning("Temp folder already exists (UUID collision): " + tempFolder.getName() + "; skipping atomic move.");
+            return worldFolder;
+        }
+        
         // Try atomic move first
         try {
             Files.move(src, dst, StandardCopyOption.ATOMIC_MOVE);
             plugin.getLogger().info("Moved world folder '" + worldFolder.getName() + "' -> '" + tempFolder.getName() + "' for deletion.");
             return tempFolder;
-        } catch (UnsupportedOperationException | IOException atomicEx) {
+        } catch (UnsupportedOperationException | IOException ex) {
             // Atomic move unsupported or failed; try non-atomic move
             try {
                 Files.move(src, dst);
