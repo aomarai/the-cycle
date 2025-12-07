@@ -26,7 +26,6 @@ jobs:
       uses: docker://rhysd/actionlint:latest
       with:
         args: -color
-      continue-on-error: true
     
     - name: Check YAML syntax
       run: |
