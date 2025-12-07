@@ -103,7 +103,11 @@ public class WorldDeletionService {
      * @param worldName world folder name to record
      */
     private synchronized void recordPendingDelete(String worldName) {
-        plugin.getDataFolder().mkdirs();
+        File df = plugin.getDataFolder();
+        if (!df.exists()) {
+            boolean created = df.mkdirs();
+            if (!created) plugin.getLogger().warning("Failed to create data folder: " + df.getAbsolutePath());
+        }
         try {
             List<String> existing = new ArrayList<>();
             if (pendingDeletesFile.exists()) {
@@ -159,7 +163,8 @@ public class WorldDeletionService {
                 } else {
                     if (!c.delete()) {
                         try {
-                            c.setWritable(true);
+                            boolean _w = c.setWritable(true);
+                            if (!_w) plugin.getLogger().fine("Couldn't set writable: " + c.getAbsolutePath());
                         } catch (Exception ignored) {
                         }
                         if (!c.delete()) return false;
@@ -169,7 +174,8 @@ public class WorldDeletionService {
         }
         if (!f.delete()) {
             try {
-                f.setWritable(true);
+                boolean _w = f.setWritable(true);
+                if (!_w) plugin.getLogger().fine("Couldn't set writable: " + f.getAbsolutePath());
             } catch (Exception ignored) {
             }
             return f.delete();
