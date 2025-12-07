@@ -30,9 +30,8 @@ jobs:
     - name: Check YAML syntax
       run: |
         echo "Checking YAML syntax for all workflow files..."
+        shopt -s nullglob
         for file in .github/workflows/*.yml .github/workflows/*.yaml; do
-          if [ -f "$file" ]; then
-            echo "Validating $file"
-            python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✓ $file is valid" || echo "✗ $file has syntax errors"
-          fi
+          echo "Validating $file"
+          python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✓ $file is valid" || echo "✗ $file has syntax errors"
         done

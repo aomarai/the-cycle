@@ -45,14 +45,9 @@ jobs:
     
     - name: Upload to Release
       if: github.event_name == 'release'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./target/the-cycle-${{ steps.get_version.outputs.version }}.jar
-        asset_name: the-cycle-${{ steps.get_version.outputs.version }}.jar
-        asset_content_type: application/java-archive
+        files: ./target/the-cycle-${{ steps.get_version.outputs.version }}.jar
     
     - name: Deploy to environment
       run: |
