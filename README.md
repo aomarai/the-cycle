@@ -217,7 +217,7 @@ The CI workflow will automatically:
 ### Build Requirements
 
 - **Java:** Version 21 (Temurin/OpenJDK)
-- **Maven:** Version 3.6+ (handled by mvnw wrapper if available)
+- **Maven:** Version 3.6+
 - **Dependencies:** Paper API 1.21.10-R0.1-SNAPSHOT
 
 ### Local Build Commands
