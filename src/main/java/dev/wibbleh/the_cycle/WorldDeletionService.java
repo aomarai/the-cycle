@@ -170,7 +170,7 @@ public class WorldDeletionService {
             // Attempt an atomic (or best-effort) rename/move of the world folder to a temporary name. This
             // reduces the chance of partially deleting the original folder (helps on interruptions or errors).
             String tempNameBase = worldName + ".deleting." + System.currentTimeMillis();
-                        File tempFolder = new File(worldRoot, tempNameBase);
+            File tempFolder = new File(worldRoot, tempNameBase);
             int tempSuffix = 0;
             while (tempFolder.exists()) {
                 tempSuffix++;
