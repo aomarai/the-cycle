@@ -1,7 +1,5 @@
 # The Cycle (Hardcore Cycle) Plugin
 
-[![CI](https://github.com/aomarai/the-cycle/actions/workflows/ci.yml/badge.svg)](https://github.com/aomarai/the-cycle/actions/workflows/ci.yml)
-
 A Paper 1.21 plugin that automatically "cycles" worlds for a hardcore-style game mode. Each cycle creates a new world (named `hardcore_cycle_N`) and — depending on configuration — unloads and deletes the previous world.
 
 This README documents install, usage, configuration keys (with examples), commands, and testing/troubleshooting steps.
@@ -34,6 +32,83 @@ mvn -DskipTests package
 ```
 
 Copy the produced JAR from `target/` into your Paper server `plugins/` folder and (re)start the server.
+
+---
+
+## Server setup (step-by-step)
+
+This plugin is intended to be used with a proxy (BungeeCord/Velocity) so you can host a small lobby server while hardcore worlds are cycled. The high-level architecture:
+- A proxy (BungeeCord/Velocity) routes players to backend Paper servers.
+- One backend server runs your hardcore worlds and this plugin.
+- One backend server acts as a lobby (the small, always-available server players are sent to while the hardcore world is unavailable).
+
+Follow these steps to set up the environment.
+
+1) Configure and start the proxy (BungeeCord example)
+
+- Install BungeeCord on the proxy machine.
+- Edit `config.yml` on the proxy to define your backend servers and enable IP forwarding. Minimal relevant settings:
+
+```yaml
+servers:
+  hub1:
+    motd: "Lobby"
+    address: 127.0.0.1:25566
+    restricted: false
+  hardcore1:
+    motd: "Hardcore backend"
+    address: 127.0.0.1:25567
+    restricted: false
+ip_forward: true
+online_mode: true
+```
+
+- `ip_forward: true` is required so backend servers receive the player's real UUID and IP (and so authentication works correctly).
+- `online_mode` is typically true on the proxy (the proxy handles authentication).
+- Start the proxy.
+
+2) Configure each backend Paper server (lobby + hardcore)
+
+On each Paper backend server (the ones the proxy points to) do the following:
+- In `server.properties` set:
+  - `online-mode=false` (the proxy already authenticates players)
+- In `spigot.yml` set the bungee option to true (enables correct handling of forwarded player IPs). Example entry:
+```yaml
+settings:
+  bungeecord: true
+```
+- Ensure the backend server `server-port` matches the `address` you set in the proxy `config.yml`.
+
+3) Networking / firewall
+
+- Open the ports used by the proxy and backend servers (the `address: host:port` values). The proxy listens for clients; backend servers typically only accept connections from the proxy but may be reachable directly if misconfigured.
+- Ensure the proxy can reach backend hosts and ports.
+
+4) Deploy this plugin
+
+- Install the plugin JAR on the hardcore backend server(s) (the servers running the cyclical hardcore worlds), not on the proxy. Optionally install it on the lobby server if you want scoreboard/bossbar behaviour there as well.
+- Configure `config.yml` for the plugin on the hardcore server. Important keys for Bungee-based lobby flow:
+  - `lobby.server: hub1` — the name of the lobby server defined on the proxy.
+  - `lobby.world: ""` (optional) — a local world name fallback in case proxy messaging fails.
+
+Example config snippet:
+```yaml
+lobby:
+  server: "hub1"    # name defined in Bungee config
+  world: ""         # optional local fallback world
+```
+
+5) Permissions and plugin messaging
+
+- The plugin uses the standard `BungeeCord` plugin messaging channel to request a `Connect` for a player. Your proxy should accept plugin messages by default; no special proxy-side plugin is required.
+- Make sure the proxy and backends are correctly set up for plugin messaging (ip_forward true and spigot bungeecord setting on backends).
+
+6) Test the setup
+
+- Connect to the proxy and join the hardcore backend.
+- Trigger a cycle (e.g., `/cycle cycle-now` or cause death-based cycle).
+- If the world is unavailable or spawn is missing, the plugin will send players to the named `lobby.server` via Bungee `Connect` message. Watch proxy logs to see the player transfer.
+- If the proxy messaging or `lobby.server` is not configured or fails, the plugin attempts to teleport players to `lobby.world` (a local fallback).
 
 ---
 
@@ -157,98 +232,6 @@ Safeguard: the plugin teleports any players still inside the previous world to t
 
 - Code is split into small helper classes (`WorldDeletionService`, `WebhookService`, `DeathListener`, `CommandHandler`) for maintainability.
 - Javadoc comments have been added to public methods to document behavior.
-
----
-
-## CI/CD Pipeline
-
-This repository uses GitHub Actions for continuous integration and deployment automation.
-
-### Automated Workflows
-
-#### CI Workflow (ci.yml)
-Automatically runs on every push and pull request to `main` and `develop` branches.
-
-**Steps:**
-1. Checks out the repository
-2. Sets up Java 21 (Temurin distribution)
-3. Caches Maven dependencies for faster builds
-4. Builds the project with `mvn clean package`
-5. Runs tests with `mvn test`
-6. Uploads build artifacts (JAR file) for 30 days
-7. Generates a build summary report
-
-**Status:** Check the badge at the top of this README for current build status.
-
-**Manual Trigger:** You can manually trigger the CI workflow from the Actions tab.
-
-#### Release Workflow (release.yml)
-Triggered when a new release is created or manually via workflow dispatch.
-
-**Steps:**
-1. Builds the project
-2. Extracts version from pom.xml
-3. Uploads JAR to GitHub Release (when triggered by a release event)
-4. Deploys to specified environment (staging or production)
-
-**Manual Deployment:**
-1. Go to Actions tab → Release workflow
-2. Click "Run workflow"
-3. Select environment (staging/production)
-4. Click "Run workflow" to start deployment
-
-### For Contributors
-
-When contributing to this project:
-
-1. **Fork and Clone:** Fork the repository and clone it locally
-2. **Create a Feature Branch:** Create a branch for your changes
-3. **Make Changes:** Implement your changes following the code style
-4. **Build Locally:** Test your changes with `mvn clean package`
-5. **Commit and Push:** Commit your changes and push to your fork
-6. **Create Pull Request:** Open a PR against the `main` branch
-7. **CI Checks:** Ensure all CI checks pass before requesting review
-
-The CI workflow will automatically:
-- Build your code
-- Run tests
-- Report any issues
-
-### Build Requirements
-
-- **Java:** Version 21 (Temurin/OpenJDK)
-- **Maven:** Version 3.6+
-- **Dependencies:** Paper API 1.21.10-R0.1-SNAPSHOT
-
-### Local Build Commands
-
-```bash
-# Clean and build
-mvn clean package
-
-# Build without tests
-mvn clean package -DskipTests
-
-# Run tests only
-mvn test
-
-# Clean all build artifacts
-mvn clean
-```
-
-### Deployment
-
-The deployment workflow supports multiple environments:
-- **Staging:** For testing before production
-- **Production:** Live deployment
-
-To deploy:
-1. Ensure all tests pass
-2. Create a release tag (e.g., `v1.0.1`)
-3. Release workflow automatically builds and attaches JAR
-4. Or manually trigger deployment via Actions tab
-
-**Note:** Actual deployment steps (SCP, server restart, etc.) should be configured based on your infrastructure.
 
 ---
 
