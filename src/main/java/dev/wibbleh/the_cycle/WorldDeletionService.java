@@ -6,6 +6,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -169,50 +170,48 @@ public class WorldDeletionService {
 
             // Attempt an atomic (or best-effort) rename/move of the world folder to a temporary name. This
             // reduces the chance of partially deleting the original folder (helps on interruptions or errors).
-            String tempNameBase = worldName + ".deleting." + System.currentTimeMillis();
-            File tempFolder = new File(worldRoot, tempNameBase);
-            int tempSuffix = 0;
-            while (tempFolder.exists()) {
-                tempSuffix++;
-                tempFolder = new File(worldRoot, tempNameBase + "." + tempSuffix);
-            }
-            boolean moved = false;
-            try {
-                Path src = worldFolder.toPath();
-                Path dst = tempFolder.toPath();
-                // Try atomic move first
-                try {
-                    Files.move(src, dst, StandardCopyOption.ATOMIC_MOVE);
-                    moved = true;
-                    plugin.getLogger().info("Moved world folder '" + worldFolder.getName() + "' -> '" + tempFolder.getName() + "' for deletion.");
-                } catch (Exception atomicEx) {
-                    // Atomic move unsupported or failed; try non-atomic move
-                    try {
-                        Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
-                        moved = true;
-                        plugin.getLogger().info("Moved world folder '" + worldFolder.getName() + "' -> '" + tempFolder.getName() + "' for deletion (non-atomic).");
-                    } catch (Exception moveEx) {
-                        plugin.getLogger().warning("Could not move world folder for atomic deletion; will attempt direct recursive delete: " + moveEx.getMessage());
-                        moved = false;
-                    }
-                }
-            } catch (Throwable t) {
-                plugin.getLogger().warning("Unexpected error while preparing atomic delete: " + t.getMessage());
-                moved = false;
-            }
-
-            if (moved) {
-                // Delete the moved folder (tempFolder) recursively
-                return deleteRecursively(tempFolder);
-            }
-
-            return deleteRecursively(worldFolder);
+            String tempName = worldName + ".deleting." + UUID.randomUUID();
+            File tempFolder = new File(worldRoot, tempName);
+            
+            File folderToDelete = attemptAtomicMove(worldFolder, tempFolder);
+            return deleteRecursively(folderToDelete);
         } catch (IOException ioe) {
             plugin.getLogger().warning("deleteWorldFolder failed (IO): " + ioe.getMessage());
             return false;
         } catch (Exception e) {
             plugin.getLogger().warning("deleteWorldFolder failed: " + e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Attempt to atomically move the world folder to a temporary location before deletion.
+     * This reduces the risk of partial deletions if an interruption occurs.
+     * Falls back to the original folder if the move fails.
+     *
+     * @param worldFolder the original world folder to move
+     * @param tempFolder the temporary destination folder
+     * @return the folder to delete (tempFolder if move succeeded, worldFolder otherwise)
+     */
+    private File attemptAtomicMove(File worldFolder, File tempFolder) {
+        Path src = worldFolder.toPath();
+        Path dst = tempFolder.toPath();
+        
+        // Try atomic move first
+        try {
+            Files.move(src, dst, StandardCopyOption.ATOMIC_MOVE);
+            plugin.getLogger().info("Moved world folder '" + worldFolder.getName() + "' -> '" + tempFolder.getName() + "' for deletion.");
+            return tempFolder;
+        } catch (UnsupportedOperationException | IOException atomicEx) {
+            // Atomic move unsupported or failed; try non-atomic move
+            try {
+                Files.move(src, dst);
+                plugin.getLogger().info("Moved world folder '" + worldFolder.getName() + "' -> '" + tempFolder.getName() + "' for deletion (non-atomic).");
+                return tempFolder;
+            } catch (IOException moveEx) {
+                plugin.getLogger().warning("Could not move world folder for atomic deletion; will attempt direct recursive delete: " + moveEx.getMessage());
+                return worldFolder;
+            }
         }
     }
 
