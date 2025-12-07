@@ -23,7 +23,7 @@ public class DeathListener implements Listener {
     private final Map<UUID, Boolean> aliveMap;
     private final List<Map<String, Object>> deathRecap;
 
-    public DeathListener(JavaPlugin plugin, boolean enableActionbar, boolean enableSharedDeath, Map<UUID, Boolean> aliveMap, List<Map<String,Object>> deathRecap) {
+    public DeathListener(JavaPlugin plugin, boolean enableActionbar, boolean enableSharedDeath, Map<UUID, Boolean> aliveMap, List<Map<String, Object>> deathRecap) {
         this.plugin = plugin;
         this.enableActionbar = enableActionbar;
         this.enableSharedDeath = enableSharedDeath;
@@ -61,7 +61,10 @@ public class DeathListener implements Listener {
                 boolean anyAlive = false;
                 for (Player p : Bukkit.getOnlinePlayers()) {
                     Boolean a = aliveMap.getOrDefault(p.getUniqueId(), true);
-                    if (a) { anyAlive = true; break; }
+                    if (a) {
+                        anyAlive = true;
+                        break;
+                    }
                 }
                 if (!anyAlive) {
                     boolean cycleIfNoPlayers = plugin.getConfig().getBoolean("behavior.cycle_when_no_online_players", true);
@@ -85,7 +88,10 @@ public class DeathListener implements Listener {
         Bukkit.getScheduler().runTask(plugin, () -> {
             plugin.getLogger().info("A player died — shared-death handler triggered.");
             for (Player p : Bukkit.getOnlinePlayers()) {
-                try { p.setHealth(0.0); } catch (Exception ignored) {}
+                try {
+                    p.setHealth(0.0);
+                } catch (Exception ignored) {
+                }
             }
             if (plugin instanceof Main) ((Main) plugin).triggerCycle();
         });

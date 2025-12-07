@@ -38,7 +38,8 @@ public class CommandHandler {
                 return true;
             }
             if (args[0].equalsIgnoreCase("status")) {
-                if (plugin instanceof Main) sender.sendMessage("Cycle=" + ((Main) plugin).getCycleNumber() + " playersOnline=" + Bukkit.getOnlinePlayers().size());
+                if (plugin instanceof Main)
+                    sender.sendMessage("Cycle=" + ((Main) plugin).getCycleNumber() + " playersOnline=" + Bukkit.getOnlinePlayers().size());
                 else sender.sendMessage("Cycle=unknown");
                 return true;
             }

@@ -2,6 +2,9 @@ package dev.wibbleh.the_cycle;
 
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
+import org.bukkit.boss.BossBar;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -11,43 +14,31 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
-import org.bukkit.boss.BossBar;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.io.*;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main extends JavaPlugin implements Listener {
+    private final AtomicInteger cycleNumber = new AtomicInteger(1);
+    // Death recap data collected per-cycle
+    private final List<Map<String, Object>> deathRecap = new ArrayList<>();
+    // Track alive players by UUID
+    private final Map<UUID, Boolean> aliveMap = new HashMap<>();
     private FileConfiguration cfg;
     private boolean enableScoreboard;
     private boolean enableActionbar;
     private boolean enableBossBar;
     private BossBar bossBar;
     private Objective objective;
-
+    // Lobby configuration: either a server name for Bungee/Velocity or a world name on this server
+    private String lobbyServer;
+    private String lobbyWorldName;
+    private boolean registeredBungeeChannel = false;
     // Cycle tracking
     private File cycleFile;
-    private final AtomicInteger cycleNumber = new AtomicInteger(1);
-
-    // Death recap data collected per-cycle
-    private final List<Map<String, Object>> deathRecap = new ArrayList<>();
-
     // Webhook
     private String webhookUrl;
-
-    // Track alive players by UUID — simple approach
-    private final Map<UUID, Boolean> aliveMap = new HashMap<>();
-
     private WorldDeletionService worldDeletionService;
     private WebhookService webhookService;
     private DeathListener deathListener;
@@ -62,11 +53,21 @@ public class Main extends JavaPlugin implements Listener {
         enableActionbar = cfg.getBoolean("features.actionbar", true);
         enableBossBar = cfg.getBoolean("features.bossbar", true);
         webhookUrl = cfg.getString("webhook.url", "");
+        // lobby config
+        lobbyServer = cfg.getString("lobby.server", "").trim();
+        lobbyWorldName = cfg.getString("lobby.world", "").trim();
+        if (!lobbyServer.isEmpty()) {
+            // register Bungee outgoing channel so we can send Connect messages
+            try {
+                getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+                registeredBungeeChannel = true;
+            } catch (Exception ignored) {
+                getLogger().warning("Could not register BungeeCord outgoing channel; cross-server lobby will not work. Reason: " + ignored.getMessage());
+            }
+        }
 
         cycleFile = new File(getDataFolder(), "cycles.json");
-        if (!getDataFolder().exists()) getDataFolder().mkdirs();
         loadCycleNumber();
-
         // wire services
         boolean deletePrev = cfg.getBoolean("behavior.delete_previous_worlds", true);
         boolean deferDelete = cfg.getBoolean("behavior.defer_delete_until_restart", false);
@@ -103,9 +104,16 @@ public class Main extends JavaPlugin implements Listener {
         writeCycleFile(cycleNumber.get());
     }
 
+    public int getCycleNumber() {
+        return cycleNumber.get();
+    }
+
     // Minimal wrappers so other classes can call into Main behaviour
-    public void setCycleNumber(int n) { cycleNumber.set(n); writeCycleFile(n); updateScoreboard(); }
-    public int getCycleNumber() { return cycleNumber.get(); }
+    public void setCycleNumber(int n) {
+        cycleNumber.set(n);
+        writeCycleFile(n);
+        updateScoreboard();
+    }
 
     // public wrapper to allow other components to request a cycle
     public void triggerCycle() {
@@ -126,18 +134,22 @@ public class Main extends JavaPlugin implements Listener {
         String newWorldName = "hardcore_cycle_" + next;
         getLogger().info("Generating world: " + newWorldName);
         World newWorld = null;
-        try { newWorld = Bukkit.createWorld(new org.bukkit.WorldCreator(newWorldName)); } catch (Exception e) { getLogger().warning("Failed to create new world '" + newWorldName + "': " + e.getMessage()); }
+        try {
+            newWorld = Bukkit.createWorld(new org.bukkit.WorldCreator(newWorldName));
+        } catch (Exception e) {
+            getLogger().warning("Failed to create new world '" + newWorldName + "': " + e.getMessage());
+        }
 
         if (next > 1 && cfg.getBoolean("behavior.delete_previous_worlds", true)) {
             String prevWorldName = "hardcore_cycle_" + (next - 1);
             World prevWorld = Bukkit.getWorld(prevWorldName);
             if (prevWorld != null) {
-                // SAFEGUARD: teleport any players still inside the previous world to the new world's spawn
+                // SAFEGUARD: teleport any players still inside the previous world to the new world's spawn (or to lobby if new world isn't available)
                 if (newWorld != null) {
                     try {
                         final org.bukkit.Location spawn = newWorld.getSpawnLocation();
                         if (spawn != null) {
-                                                      for (Player p : prevWorld.getPlayers()) {
+                            for (Player p : prevWorld.getPlayers()) {
                                 try {
                                     p.teleport(spawn);
                                 } catch (Exception ex) {
@@ -145,15 +157,17 @@ public class Main extends JavaPlugin implements Listener {
                                 }
                                 aliveMap.put(p.getUniqueId(), true);
                             }
-                            getLogger().info("Teleported players out of previous world: " + prevWorldName + " to new spawn.");
                         } else {
-                            getLogger().warning("New world spawn is null; cannot safely teleport players out of " + prevWorldName);
+                            // spawn is null — fall back to lobby
+                            for (Player p : prevWorld.getPlayers()) sendPlayerToLobby(p);
                         }
+                        getLogger().info("Teleported players out of previous world: " + prevWorldName + " to new spawn.");
                     } catch (Exception ex) {
                         getLogger().warning("Error while teleporting players from previous world: " + ex.getMessage());
                     }
                 } else {
-                    getLogger().warning("New world is null; skipping teleport of players from " + prevWorldName + ". Deletion will be deferred/attempted but may fail.");
+                    getLogger().warning("New world is null; teleporting players from " + prevWorldName + " to lobby instead.");
+                    for (Player p : prevWorld.getPlayers()) sendPlayerToLobby(p);
                 }
 
                 getLogger().info("Unloading previous world: " + prevWorldName);
@@ -172,12 +186,23 @@ public class Main extends JavaPlugin implements Listener {
 
         if (newWorld != null) {
             final org.bukkit.Location spawn = newWorld.getSpawnLocation();
-            Bukkit.getOnlinePlayers().forEach(p -> {
-                try { p.teleport(spawn); } catch (Exception ex) { getLogger().warning("Failed to teleport player " + p.getName() + " to new world: " + ex.getMessage()); }
-                aliveMap.put(p.getUniqueId(), true);
-            });
+            if (spawn != null) {
+                Bukkit.getOnlinePlayers().forEach(p -> {
+                    try {
+                        p.teleport(spawn);
+                    } catch (Exception ex) {
+                        getLogger().warning("Failed to teleport player " + p.getName() + " to new world: " + ex.getMessage());
+                    }
+                    aliveMap.put(p.getUniqueId(), true);
+                });
+            } else {
+                // New world exists but spawn is null / unavailable — send players to lobby
+                getLogger().warning("New world spawn is null; sending players to configured lobby (if any).");
+                Bukkit.getOnlinePlayers().forEach(this::sendPlayerToLobby);
+            }
         } else {
-            getLogger().warning("New world is null; skipping player teleport.");
+            getLogger().warning("New world is null; sending players to configured lobby (if any).");
+            Bukkit.getOnlinePlayers().forEach(this::sendPlayerToLobby);
         }
 
         pushBossbar("World cycled — welcome to cycle #" + next);
@@ -263,7 +288,7 @@ public class Main extends JavaPlugin implements Listener {
             if (i < recap.size() - 1) sb.append(",");
         }
 
-        sb.append("]}]}" );
+        sb.append("]}]}");
         return sb.toString();
     }
 
@@ -273,6 +298,43 @@ public class Main extends JavaPlugin implements Listener {
         return s.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n");
+    }
+
+    // Send a player to the configured lobby. If lobbyServer is set and Bungee outgoing channel
+    // is registered, send a BungeeCord Connect request. Otherwise, if lobbyWorldName exists on this server,
+    // teleport the player to that world's spawn. If neither exists, log and leave player in place.
+    private void sendPlayerToLobby(Player p) {
+        if (p == null) return;
+        if (!lobbyServer.isEmpty() && registeredBungeeChannel) {
+            try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                 DataOutputStream out = new DataOutputStream(outputStream)) {
+                out.writeUTF("Connect");
+                out.writeUTF(lobbyServer);
+                p.sendPluginMessage(this, "BungeeCord", outputStream.toByteArray());
+                getLogger().info("Sent player " + p.getName() + " to lobby server: " + lobbyServer);
+                return;
+            } catch (Exception e) {
+                getLogger().warning("Failed to send player to Bungee lobby: " + e.getMessage());
+            }
+        }
+
+        if (!lobbyWorldName.isEmpty()) {
+            World lw = Bukkit.getWorld(lobbyWorldName);
+            if (lw != null) {
+                try {
+                    p.teleport(lw.getSpawnLocation());
+                    aliveMap.put(p.getUniqueId(), true);
+                    getLogger().info("Teleported player " + p.getName() + " to lobby world: " + lobbyWorldName);
+                    return;
+                } catch (Exception e) {
+                    getLogger().warning("Failed to teleport player to lobby world: " + e.getMessage());
+                }
+            } else {
+                getLogger().warning("Configured lobby world '" + lobbyWorldName + "' not found on this server.");
+            }
+        }
+
+        getLogger().warning("No lobby configured; cannot move player " + p.getName() + ".");
     }
 
     // Delegate command handling to CommandHandler

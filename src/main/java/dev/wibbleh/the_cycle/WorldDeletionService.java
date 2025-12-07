@@ -3,12 +3,7 @@ package dev.wibbleh.the_cycle;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,7 +36,8 @@ public class WorldDeletionService {
         }
         if (lines.isEmpty()) {
             boolean delOk = pendingDeletesFile.delete();
-            if (!delOk) plugin.getLogger().warning("Could not delete empty pending deletes file: " + pendingDeletesFile.getAbsolutePath());
+            if (!delOk)
+                plugin.getLogger().warning("Could not delete empty pending deletes file: " + pendingDeletesFile.getAbsolutePath());
             return;
         }
         for (String w : lines) {
@@ -54,8 +50,10 @@ public class WorldDeletionService {
         }
         try {
             boolean delOk = pendingDeletesFile.delete();
-            if (!delOk) plugin.getLogger().warning("Could not delete pending deletes file after scheduling: " + pendingDeletesFile.getAbsolutePath());
-        } catch (Exception ignored) {}
+            if (!delOk)
+                plugin.getLogger().warning("Could not delete pending deletes file after scheduling: " + pendingDeletesFile.getAbsolutePath());
+        } catch (Exception ignored) {
+        }
     }
 
     public void scheduleDeleteWorldFolder(String worldName) {
@@ -129,14 +127,20 @@ public class WorldDeletionService {
                     if (!deleteRecursively(c)) return false;
                 } else {
                     if (!c.delete()) {
-                        try { c.setWritable(true); } catch (Exception ignored) {}
+                        try {
+                            c.setWritable(true);
+                        } catch (Exception ignored) {
+                        }
                         if (!c.delete()) return false;
                     }
                 }
             }
         }
         if (!f.delete()) {
-            try { f.setWritable(true); } catch (Exception ignored) {}
+            try {
+                f.setWritable(true);
+            } catch (Exception ignored) {
+            }
             return f.delete();
         }
         return true;
