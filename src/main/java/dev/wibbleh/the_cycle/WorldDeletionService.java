@@ -111,7 +111,6 @@ public class WorldDeletionService {
     private boolean deleteWorldFolder(String worldName) {
         try {
             File worldRoot = Bukkit.getWorldContainer();
-            if (worldRoot == null) return false;
             File worldFolder = new File(worldRoot, worldName);
             if (!worldFolder.exists()) return true;
             return deleteRecursively(worldFolder);
