@@ -59,7 +59,8 @@ class MainTest {
 
     @Test
     void testEscapeMethod() throws Exception {
-        // Use reflection to access the private escape method
+        // Note: Using CALLS_REAL_METHODS to test private utility method without changing visibility.
+        // This is appropriate for testing internal implementation details that shouldn't be exposed publicly.
         Main plugin = mock(Main.class, CALLS_REAL_METHODS);
         Method escapeMethod = Main.class.getDeclaredMethod("escape", String.class);
         escapeMethod.setAccessible(true);
@@ -155,10 +156,14 @@ class MainTest {
 
         String payload = (String) buildPayloadMethod.invoke(plugin, 1, recap);
         
-        // Verify escaping occurred
-        assertTrue(payload.contains("\\\""));  // Quotes should be escaped
-        assertTrue(payload.contains("\\n"));   // Newlines should be escaped
-        assertTrue(payload.contains("\\\\"));  // Backslashes should be escaped
+        // Verify specific field escaping in the name field (contains the player name and location)
+        assertTrue(payload.contains("Player\\\"1"), "Player name should have escaped quote");
+        
+        // Verify cause field escaping (contains the cause with newline)
+        assertTrue(payload.contains("fell\\nfrom"), "Cause should have escaped newline");
+        
+        // Verify drops field escaping (contains backslash)
+        assertTrue(payload.contains("ITEM\\\\TEST"), "Drops should have escaped backslash");
     }
 
     @Test
