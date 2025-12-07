@@ -59,8 +59,6 @@ class MainTest {
 
     @Test
     void testEscapeMethod() throws Exception {
-        // Note: Using CALLS_REAL_METHODS to test private utility method without changing visibility.
-        // This is appropriate for testing internal implementation details that shouldn't be exposed publicly.
         Main plugin = mock(Main.class, CALLS_REAL_METHODS);
         Method escapeMethod = Main.class.getDeclaredMethod("escape", String.class);
         escapeMethod.setAccessible(true);
@@ -166,34 +164,7 @@ class MainTest {
         assertTrue(payload.contains("ITEM\\\\TEST"), "Drops should have escaped backslash");
     }
 
-    @Test
-    void testGetCycleNumber() {
-        Main plugin = mock(Main.class);
-        when(plugin.getCycleNumber()).thenReturn(5);
-        
-        assertEquals(5, plugin.getCycleNumber());
-        verify(plugin).getCycleNumber();
-    }
 
-    @Test
-    void testSetCycleNumber() {
-        Main plugin = mock(Main.class);
-        doNothing().when(plugin).setCycleNumber(anyInt());
-        
-        plugin.setCycleNumber(10);
-        
-        verify(plugin).setCycleNumber(10);
-    }
-
-    @Test
-    void testTriggerCycle() {
-        Main plugin = mock(Main.class);
-        doNothing().when(plugin).triggerCycle();
-        
-        plugin.triggerCycle();
-        
-        verify(plugin).triggerCycle();
-    }
 
     @Test
     void testCycleFileOperations() throws Exception {

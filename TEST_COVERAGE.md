@@ -4,7 +4,7 @@ This document provides an overview of the comprehensive unit test suite for the-
 
 ## Test Statistics
 
-- **Total Tests**: 46
+- **Total Tests**: 42
 - **Test Classes**: 5
 - **All Tests Passing**: ✅ Yes
 - **Test Framework**: JUnit 5 with Mockito
@@ -16,10 +16,11 @@ This document provides an overview of the comprehensive unit test suite for the-
 The project uses GitHub Actions to automatically run tests on every push and pull request. The CI pipeline:
 
 - ✅ Builds the project with Maven
-- ✅ Runs all 46 unit tests
+- ✅ Runs all 42 unit tests
 - ✅ Generates test reports
 - ✅ Uploads test results as artifacts
 - ✅ Fails the build if any tests fail
+- ✅ Has proper permissions for test reporting on pull requests
 
 **Workflow file**: `.github/workflows/maven-test.yml`
 
@@ -103,7 +104,7 @@ To view test results, check the "Actions" tab in GitHub after pushing changes.
 - File lock handling
 - Recursive directory deletion
 
-### 4. DeathListener (9 tests)
+### 4. DeathListener (8 tests)
 
 **Location**: `src/test/java/dev/wibbleh/the_cycle/DeathListenerTest.java`
 
@@ -112,7 +113,6 @@ To view test results, check the "Actions" tab in GitHub after pushing changes.
 - ✅ Item drop recording and formatting
 - ✅ Action bar message sending when enabled
 - ✅ Action bar disabled behavior
-- ✅ Delayed task scheduling
 - ✅ Multiple player deaths tracking
 - ✅ Shared death disabled behavior
 - ✅ Shared death enabled trigger
@@ -132,11 +132,19 @@ To view test results, check the "Actions" tab in GitHub after pushing changes.
 - Real-time event firing
 - Multi-threaded race conditions
 
-### 5. Main Plugin (11 tests)
+### 5. Main Plugin (8 tests)
 
 **Location**: `src/test/java/dev/wibbleh/the_cycle/MainTest.java`
 
 **Coverage**:
+- ✅ JSON string escaping (backslash, quotes, newlines)
+- ✅ Webhook payload building with empty recap
+- ✅ Webhook payload with single death entry
+- ✅ Webhook payload with multiple deaths
+- ✅ Special character escaping in webhook payload
+- ✅ Cycle file read/write operations
+- ✅ Data folder creation
+- ✅ Null player handling in lobby teleport
 - ✅ JSON string escaping (backslash, quotes, newlines)
 - ✅ Webhook payload building with empty recap
 - ✅ Webhook payload with single death entry
@@ -266,7 +274,7 @@ The following dependencies are used for testing (see `pom.xml`):
 
 This test suite provides **comprehensive coverage** of all testable components in the-cycle plugin:
 
-- ✅ **46 unit tests** covering critical functionality
+- ✅ **42 unit tests** covering critical functionality
 - ✅ **All edge cases** handled (null, empty, invalid inputs)
 - ✅ **Proper mocking** of Bukkit dependencies
 - ✅ **Fast execution** (< 10 seconds total)

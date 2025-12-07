@@ -164,21 +164,7 @@ class DeathListenerTest {
         }
     }
 
-    @Test
-    void testOnPlayerDeathSchedulesTask() {
-        DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
-        
-        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
-            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
-            mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn((Collection) new ArrayList<Player>());
-            lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
-            
-            listener.onPlayerDeath(mockEvent);
-            
-            // Verify a delayed task is scheduled (should be called in the constructor)
-            // The actual verification happens through the Runnable execution
-        }
-    }
+
 
     @Test
     void testMultipleDeathsRecorded() {

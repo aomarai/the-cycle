@@ -146,7 +146,7 @@ class WorldDeletionServiceTest {
         WorldDeletionService service = new WorldDeletionService(mockPlugin, true, false, false);
         
         File pendingFile = new File(tempDir.toFile(), "pending_deletes.txt");
-        pendingFile.createNewFile();
+        assertTrue(pendingFile.createNewFile(), "File should not already exist");
         
         try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
             mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
@@ -200,12 +200,11 @@ class WorldDeletionServiceTest {
             File pendingFile = new File(tempDir.toFile(), "pending_deletes.txt");
             assertTrue(pendingFile.exists());
             
-            // Read the file and count occurrences
-            java.nio.file.Files.lines(pendingFile.toPath())
+            // Verify deduplication - should only have one occurrence
+            long count = java.nio.file.Files.lines(pendingFile.toPath())
                     .filter(line -> line.trim().equals("duplicate_world"))
-                    .forEach(line -> {
-                        // There should only be one occurrence due to deduplication
-                    });
+                    .count();
+            assertEquals(1, count, "Should have exactly one occurrence due to deduplication");
         }
     }
 }
