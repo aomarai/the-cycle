@@ -27,7 +27,6 @@ public class Main extends JavaPlugin implements Listener {
     private final Map<UUID, Boolean> aliveMap = new HashMap<>();
     private FileConfiguration cfg;
     private boolean enableScoreboard;
-    private boolean enableActionbar;
     private boolean enableBossBar;
     private BossBar bossBar;
     private Objective objective;
@@ -41,7 +40,6 @@ public class Main extends JavaPlugin implements Listener {
     private String webhookUrl;
     private WorldDeletionService worldDeletionService;
     private WebhookService webhookService;
-    private DeathListener deathListener;
     private CommandHandler commandHandler;
 
     /**
@@ -54,7 +52,7 @@ public class Main extends JavaPlugin implements Listener {
         cfg = getConfig();
 
         enableScoreboard = cfg.getBoolean("features.scoreboard", true);
-        enableActionbar = cfg.getBoolean("features.actionbar", true);
+        boolean enableActionbarLocal = cfg.getBoolean("features.actionbar", true);
         enableBossBar = cfg.getBoolean("features.bossbar", true);
         webhookUrl = cfg.getString("webhook.url", "");
         // lobby config
@@ -65,8 +63,8 @@ public class Main extends JavaPlugin implements Listener {
             try {
                 getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
                 registeredBungeeChannel = true;
-            } catch (Exception ignored) {
-                getLogger().warning("Could not register BungeeCord outgoing channel; cross-server lobby will not work. Reason: " + ignored.getMessage());
+            } catch (Exception e) {
+                getLogger().warning("Could not register BungeeCord outgoing channel; cross-server lobby will not work. Reason: " + e.getMessage());
             }
         }
 
@@ -80,12 +78,12 @@ public class Main extends JavaPlugin implements Listener {
 
         worldDeletionService = new WorldDeletionService(this, deletePrev, deferDelete, asyncDelete);
         webhookService = new WebhookService(this, webhookUrl);
-        deathListener = new DeathListener(this, enableActionbar, sharedDeath, aliveMap, deathRecap);
+        DeathListener dl = new DeathListener(this, enableActionbarLocal, sharedDeath, aliveMap, deathRecap);
         commandHandler = new CommandHandler(this);
 
         worldDeletionService.processPendingDeletions();
 
-        getServer().getPluginManager().registerEvents(deathListener, this);
+        getServer().getPluginManager().registerEvents(dl, this);
 
         if (enableBossBar) {
             bossBar = Bukkit.createBossBar("Next world in progress...", BarColor.GREEN, BarStyle.SOLID);
@@ -100,7 +98,7 @@ public class Main extends JavaPlugin implements Listener {
 
         Bukkit.getOnlinePlayers().forEach(p -> aliveMap.put(p.getUniqueId(), true));
 
-        getLogger().info("HardcoreCyclePlugin enabled — cycle #" + cycleNumber.get());
+        getLogger().info("TheCyclePlugin enabled — cycle #" + cycleNumber.get());
     }
 
     /**
