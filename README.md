@@ -1,6 +1,6 @@
-# HardcoreCycle Plugin
+# The Cycle
 
-A Paper 1.21 plugin to automatically cycle worlds when players die in a hardcore-style game.
+A Paper 1.21 plugin to automatically cycle worlds when players die in a hardcore world.
 
 Features
 - Create new world per cycle (hardcore_cycle_N)
@@ -43,10 +43,4 @@ Testing tips
 Safety
 - Deleting world folders is destructive. Keep backups.
 - Windows may hold file locks; consider using `defer_delete_until_restart` during testing.
-
-If you want, I can:
-- Clean IDE warnings and tidy imports across all classes.
-- Add unit tests or integration harness (requires a server test framework).
-- Polish the plugin.yml with permissions or localization.
-
 
