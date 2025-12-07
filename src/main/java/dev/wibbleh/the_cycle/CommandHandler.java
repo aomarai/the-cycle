@@ -15,7 +15,7 @@ public class CommandHandler {
     @SuppressWarnings("unused")
     public boolean handle(CommandSender sender, Command cmd, String label, String[] args) {
         String name = cmd.getName();
-        if (name.equalsIgnoreCase("cycle") || name.equalsIgnoreCase("hccycle")) {
+        if (name.equalsIgnoreCase("cycle")) {
             if (args.length == 0) {
                 sender.sendMessage("Usage: /cycle setcycle <n> | cycle-now | status");
                 return true;
@@ -33,7 +33,7 @@ public class CommandHandler {
                 return true;
             }
             if (args[0].equalsIgnoreCase("cycle-now")) {
-                if (plugin instanceof Main) ((Main) plugin).performCycle();
+                if (plugin instanceof Main) ((Main) plugin).triggerCycle();
                 sender.sendMessage("Cycling world now.");
                 return true;
             }

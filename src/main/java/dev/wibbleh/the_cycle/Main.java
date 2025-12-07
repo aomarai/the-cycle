@@ -143,10 +143,40 @@ public class Main extends JavaPlugin implements Listener {
             String prevWorldName = "hardcore_cycle_" + (next - 1);
             World prevWorld = Bukkit.getWorld(prevWorldName);
             if (prevWorld != null) {
+                // SAFEGUARD: teleport any players still inside the previous world to the new world's spawn
+                if (newWorld != null) {
+                    try {
+                        final org.bukkit.Location spawn = newWorld.getSpawnLocation();
+                        if (spawn != null) {
+                                                      for (Player p : prevWorld.getPlayers()) {
+                                try {
+                                    p.teleport(spawn);
+                                } catch (Exception ex) {
+                                    getLogger().warning("Failed to teleport player " + p.getName() + " out of " + prevWorldName + ": " + ex.getMessage());
+                                }
+                                aliveMap.put(p.getUniqueId(), true);
+                            }
+                            getLogger().info("Teleported players out of previous world: " + prevWorldName + " to new spawn.");
+                        } else {
+                            getLogger().warning("New world spawn is null; cannot safely teleport players out of " + prevWorldName);
+                        }
+                    } catch (Exception ex) {
+                        getLogger().warning("Error while teleporting players from previous world: " + ex.getMessage());
+                    }
+                } else {
+                    getLogger().warning("New world is null; skipping teleport of players from " + prevWorldName + ". Deletion will be deferred/attempted but may fail.");
+                }
+
+                getLogger().info("Unloading previous world: " + prevWorldName);
                 boolean unloaded = Bukkit.unloadWorld(prevWorld, false);
-                if (!unloaded) getLogger().warning("Failed to unload world " + prevWorldName + "; skipping deletion.");
-                else worldDeletionService.scheduleDeleteWorldFolder(prevWorldName);
+                if (!unloaded) {
+                    getLogger().warning("Failed to unload world " + prevWorldName + "; scheduling deletion fallback.");
+                    worldDeletionService.scheduleDeleteWorldFolder(prevWorldName);
+                } else {
+                    worldDeletionService.scheduleDeleteWorldFolder(prevWorldName);
+                }
             } else {
+                // World file may still exist on disk even if not loaded; attempt deletion of folder anyway
                 worldDeletionService.scheduleDeleteWorldFolder(prevWorldName);
             }
         }

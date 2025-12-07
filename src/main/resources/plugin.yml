@@ -1,0 +1,10 @@
+name: HardcoreCycle
+main: dev.wibbleh.the_cycle.Main
+version: 1.0.0
+api-version: 1.21
+commands:
+  cycle:
+    description: Manage and trigger hardcore world cycles
+    usage: /cycle setcycle <n> | /cycle cycle-now | /cycle status
+    permission: thecycle.cycle
+    permission-message: You do not have permission to use that command.
