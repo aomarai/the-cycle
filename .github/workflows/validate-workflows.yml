@@ -1,0 +1,37 @@
+name: Validate Workflows
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    paths:
+      - '.github/workflows/**'
+    branches:
+      - main
+      - develop
+
+jobs:
+  validate:
+    name: Validate GitHub Actions Workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Validate workflow syntax
+      uses: docker://rhysd/actionlint:latest
+      with:
+        args: -color
+    
+    - name: Check YAML syntax
+      run: |
+        echo "Checking YAML syntax for all workflow files..."
+        shopt -s nullglob  # Prevent glob expansion to literal string when no files match
+        for file in .github/workflows/*.yml .github/workflows/*.yaml; do
+          echo "Validating $file"
+          python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✓ $file is valid" || echo "✗ $file has syntax errors"
+        done

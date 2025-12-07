@@ -1,5 +1,7 @@
 # The Cycle (Hardcore Cycle) Plugin
 
+[![CI](https://github.com/aomarai/the-cycle/actions/workflows/ci.yml/badge.svg)](https://github.com/aomarai/the-cycle/actions/workflows/ci.yml)
+
 A Paper 1.21 plugin that automatically "cycles" worlds for a hardcore-style game mode. Each cycle creates a new world (named `hardcore_cycle_N`) and — depending on configuration — unloads and deletes the previous world.
 
 This README documents install, usage, configuration keys (with examples), commands, and testing/troubleshooting steps.
@@ -155,6 +157,98 @@ Safeguard: the plugin teleports any players still inside the previous world to t
 
 - Code is split into small helper classes (`WorldDeletionService`, `WebhookService`, `DeathListener`, `CommandHandler`) for maintainability.
 - Javadoc comments have been added to public methods to document behavior.
+
+---
+
+## CI/CD Pipeline
+
+This repository uses GitHub Actions for continuous integration and deployment automation.
+
+### Automated Workflows
+
+#### CI Workflow (ci.yml)
+Automatically runs on every push and pull request to `main` and `develop` branches.
+
+**Steps:**
+1. Checks out the repository
+2. Sets up Java 21 (Temurin distribution)
+3. Caches Maven dependencies for faster builds
+4. Builds the project with `mvn clean package`
+5. Runs tests with `mvn test`
+6. Uploads build artifacts (JAR file) for 30 days
+7. Generates a build summary report
+
+**Status:** Check the badge at the top of this README for current build status.
+
+**Manual Trigger:** You can manually trigger the CI workflow from the Actions tab.
+
+#### Release Workflow (release.yml)
+Triggered when a new release is created or manually via workflow dispatch.
+
+**Steps:**
+1. Builds the project
+2. Extracts version from pom.xml
+3. Uploads JAR to GitHub Release (when triggered by a release event)
+4. Deploys to specified environment (staging or production)
+
+**Manual Deployment:**
+1. Go to Actions tab → Release workflow
+2. Click "Run workflow"
+3. Select environment (staging/production)
+4. Click "Run workflow" to start deployment
+
+### For Contributors
+
+When contributing to this project:
+
+1. **Fork and Clone:** Fork the repository and clone it locally
+2. **Create a Feature Branch:** Create a branch for your changes
+3. **Make Changes:** Implement your changes following the code style
+4. **Build Locally:** Test your changes with `mvn clean package`
+5. **Commit and Push:** Commit your changes and push to your fork
+6. **Create Pull Request:** Open a PR against the `main` branch
+7. **CI Checks:** Ensure all CI checks pass before requesting review
+
+The CI workflow will automatically:
+- Build your code
+- Run tests
+- Report any issues
+
+### Build Requirements
+
+- **Java:** Version 21 (Temurin/OpenJDK)
+- **Maven:** Version 3.6+
+- **Dependencies:** Paper API 1.21.10-R0.1-SNAPSHOT
+
+### Local Build Commands
+
+```bash
+# Clean and build
+mvn clean package
+
+# Build without tests
+mvn clean package -DskipTests
+
+# Run tests only
+mvn test
+
+# Clean all build artifacts
+mvn clean
+```
+
+### Deployment
+
+The deployment workflow supports multiple environments:
+- **Staging:** For testing before production
+- **Production:** Live deployment
+
+To deploy:
+1. Ensure all tests pass
+2. Create a release tag (e.g., `v1.0.1`)
+3. Release workflow automatically builds and attaches JAR
+4. Or manually trigger deployment via Actions tab
+
+**Note:** Actual deployment steps (SCP, server restart, etc.) should be configured based on your infrastructure.
 
 ---
 
