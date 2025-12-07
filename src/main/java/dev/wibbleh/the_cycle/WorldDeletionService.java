@@ -6,6 +6,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 public class WorldDeletionService {
     private final JavaPlugin plugin;
@@ -131,6 +135,8 @@ public class WorldDeletionService {
 
     /**
      * Delete the world folder on disk. Returns true if deletion succeeded or folder did not exist.
+     * Adds a safety check to ensure the target lies under the server world container to avoid
+     * accidental deletion of arbitrary filesystem locations.
      *
      * @param worldName name of the world folder to delete
      * @return true when deletion was successful or folder absent; false on error
@@ -138,12 +144,80 @@ public class WorldDeletionService {
     private boolean deleteWorldFolder(String worldName) {
         try {
             File worldRoot = Bukkit.getWorldContainer();
+            if (worldRoot == null) {
+                plugin.getLogger().warning("World container is null; cannot delete world: " + worldName);
+                return false;
+            }
+
             File worldFolder = new File(worldRoot, worldName);
             if (!worldFolder.exists()) return true;
-            return deleteRecursively(worldFolder);
+
+            // Resolve canonical paths to avoid symlink/path-traversal issues
+            String rootCanon = worldRoot.getCanonicalPath();
+            String folderCanon = worldFolder.getCanonicalPath();
+
+            // Ensure the folder to delete is strictly inside the world container
+            // (folderCanon must start with rootCanon + File.separator). Refuse if equal to root.
+            String prefix = rootCanon.endsWith(File.separator) ? rootCanon : rootCanon + File.separator;
+            if (!folderCanon.startsWith(prefix)) {
+                plugin.getLogger().warning("Refusing to delete world folder outside world container: " + folderCanon);
+                return false;
+            }
+            if (folderCanon.equals(rootCanon)) {
+                plugin.getLogger().warning("Refusing to delete the world container root: " + rootCanon);
+                return false;
+            }
+
+            // Attempt an atomic (or best-effort) rename/move of the world folder to a temporary name. This
+            // reduces the chance of partially deleting the original folder (helps on interruptions or errors).
+            String tempName = worldName + ".deleting." + UUID.randomUUID();
+            File tempFolder = new File(worldRoot, tempName);
+            
+            File folderToDelete = attemptAtomicMove(worldFolder, tempFolder);
+            return deleteRecursively(folderToDelete);
+        } catch (IOException ioe) {
+            plugin.getLogger().warning("deleteWorldFolder failed (IO): " + ioe.getMessage());
+            return false;
         } catch (Exception e) {
             plugin.getLogger().warning("deleteWorldFolder failed: " + e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Attempt to atomically move the world folder to a temporary location before deletion.
+     * This reduces the risk of partial deletions if an interruption occurs.
+     * Falls back to the original folder if the move fails.
+     *
+     * @param worldFolder the original world folder to move
+     * @param tempFolder the temporary destination folder
+     * @return the folder to delete (tempFolder if move succeeded, worldFolder otherwise)
+     */
+    private File attemptAtomicMove(File worldFolder, File tempFolder) {
+        Path src = worldFolder.toPath();
+        Path dst = tempFolder.toPath();
+        
+        // Ensure destination doesn't exist (UUID collision is extremely unlikely, but check for safety)
+        if (tempFolder.exists()) {
+            plugin.getLogger().warning("Temp folder already exists (UUID collision): " + tempFolder.getName() + "; skipping atomic move.");
+            return worldFolder;
+        }
+        
+        // Try atomic move first
+        try {
+            Files.move(src, dst, StandardCopyOption.ATOMIC_MOVE);
+            plugin.getLogger().info("Moved world folder '" + worldFolder.getName() + "' -> '" + tempFolder.getName() + "' for deletion.");
+            return tempFolder;
+        } catch (UnsupportedOperationException | IOException ex) {
+            // Atomic move unsupported or failed; try non-atomic move
+            try {
+                Files.move(src, dst);
+                plugin.getLogger().info("Moved world folder '" + worldFolder.getName() + "' -> '" + tempFolder.getName() + "' for deletion (non-atomic).");
+                return tempFolder;
+            } catch (IOException moveEx) {
+                plugin.getLogger().warning("Could not move world folder for atomic deletion; will attempt direct recursive delete: " + moveEx.getMessage());
+                return worldFolder;
+            }
         }
     }
 
