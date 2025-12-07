@@ -48,6 +48,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: ./target/the-cycle-${{ steps.get_version.outputs.version }}.jar
+        token: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Deploy to environment
       run: |

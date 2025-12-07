@@ -30,7 +30,7 @@ jobs:
     - name: Check YAML syntax
       run: |
         echo "Checking YAML syntax for all workflow files..."
-        shopt -s nullglob
+        shopt -s nullglob  # Prevent glob expansion to literal string when no files match
         for file in .github/workflows/*.yml .github/workflows/*.yaml; do
           echo "Validating $file"
           python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✓ $file is valid" || echo "✗ $file has syntax errors"
