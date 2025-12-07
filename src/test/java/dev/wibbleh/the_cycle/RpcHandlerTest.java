@@ -23,8 +23,9 @@ class RpcHandlerTest {
         // Ensure getLogger() returns a real logger to avoid NPE from code that logs
         lenient().when(mockMain.getLogger()).thenReturn(Logger.getLogger("test"));
 
-        // Create a handler with an empty secret (no validation)
-        RpcHandler handler = new RpcHandler(mockMain, mockMain, "hardcore-server", "");
+        // Create a handler with an empty secret (no validation) and the namespaced channel
+        final String RPC_CHANNEL = "thecycle:rpc";
+        RpcHandler handler = new RpcHandler(mockMain, mockMain, "", RPC_CHANNEL);
 
         // Build payload: "rpc::<secret>::cycle-now::<caller>"
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -36,7 +37,7 @@ class RpcHandlerTest {
 
         // Call onPluginMessageReceived with a mocked player and verify main.triggerCycle is invoked
         Player p = mock(Player.class);
-        handler.onPluginMessageReceived("TheCycleRPC", p, bytes);
+        handler.onPluginMessageReceived(RPC_CHANNEL, p, bytes);
 
         verify(mockMain).triggerCycle();
     }

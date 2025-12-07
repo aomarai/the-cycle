@@ -43,6 +43,9 @@ class CommandHandlerTest {
         }).when(mockSender).sendMessage(anyString());
         // By default treat the mocked plugin as the hardcore backend to match typical tests
         lenient().when(mockPlugin.isHardcoreBackend()).thenReturn(true);
+        // By default grant the mock sender the command permission so tests that expect
+        // execution/forwarding are not blocked by the new permission check.
+        lenient().when(mockSender.hasPermission("thecycle.cycle")).thenReturn(true);
     }
 
     @Test

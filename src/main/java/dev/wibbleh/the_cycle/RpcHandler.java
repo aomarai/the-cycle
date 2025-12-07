@@ -22,16 +22,24 @@ public class RpcHandler implements PluginMessageListener {
     private final JavaPlugin plugin;
     private final Main main;
     private final String rpcSecret;
+    private final String rpcChannel;
 
-    public RpcHandler(JavaPlugin plugin, Main main, String hardcoreServerName, String rpcSecret) {
+    /**
+     * @param plugin hosting plugin
+     * @param main main plugin instance
+     * @param rpcSecret optional shared secret for RPC validation
+     * @param rpcChannel namespaced plugin channel (eg. "thecycle:rpc")
+     */
+    public RpcHandler(JavaPlugin plugin, Main main, String rpcSecret, String rpcChannel) {
         this.plugin = Objects.requireNonNull(plugin);
         this.main = Objects.requireNonNull(main);
         this.rpcSecret = rpcSecret == null ? "" : rpcSecret;
+        this.rpcChannel = rpcChannel == null ? "thecycle:rpc" : rpcChannel;
     }
 
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (!"TheCycleRPC".equals(channel)) return;
+        if (!this.rpcChannel.equals(channel)) return;
         if (message == null || message.length == 0) return;
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(message))) {
             String payload = in.readUTF();

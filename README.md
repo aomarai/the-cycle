@@ -10,6 +10,13 @@ Key features
 - Webhook notifications after cycles
 - Scoreboard, bossbar and actionbar features
 
+Permissions
+-----------
+- Permission node: `thecycle.cycle`
+  - Declared in `plugin.yml` with `default: op`.
+  - Required to run `/cycle` and to forward `/cycle cycle-now` from a lobby to the hardcore backend.
+  - Use your permissions plugin to grant `thecycle.cycle` to groups or players as desired (for example, add it to your admin group or to specific staff roles).
+
 Installation
 ------------
 1. Build the plugin JAR (`the-cycle-1.0.0.jar`) with Maven: `mvn -DskipTests=false package`.
@@ -107,7 +114,12 @@ Security and deletion safety
 
 Testing
 -------
-- Unit tests are included under `src/test/java`. Run with Maven:
+- Unit and integration tests are included under `src/test/java`.
+  - `CommandPermissionTest` verifies permission enforcement for `/cycle`.
+  - `IntegrationForwardTest` validates that the lobby's `sendRpcToHardcore` builds the Bungee `Forward` packet with the correct target and inner RPC payload.
+  - `RpcHandlerTest` verifies inbound RPC parsing and that it triggers a cycle on the hardcore instance.
+
+Run tests:
 
 ```powershell
 mvn -DskipTests=false test
@@ -123,5 +135,3 @@ Files in repo
 Support / Contribution
 ----------------------
 If you'd like additional features (for example, authentication for forwarded requests, richer RPC with response delivery, or monitoring hooks), open an issue or provide a PR.
-
-

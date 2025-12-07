@@ -41,6 +41,14 @@ public class Main extends JavaPlugin implements Listener {
     // RPC / forwarding configuration
     private String rpcSecret = "";
     private String hardcoreServerName = "";
+        /**
+     * Namespaced RPC plugin channel used for lobby-to-hardcore server forwarding.
+     * <p>
+     * This channel name must contain a colon (':') to comply with Bukkit/Spigot plugin messaging requirements.
+     * It is used for forwarding RPC messages between the lobby and hardcore servers.
+     */
+    private static final String RPC_CHANNEL = "thecycle:rpc";
+    private boolean registeredRpcChannel = false;
     // Webhook
     private String webhookUrl;
     private WorldDeletionService worldDeletionService;
@@ -101,14 +109,17 @@ public class Main extends JavaPlugin implements Listener {
         // Register RPC handler: incoming channel on hardcore, and provide outgoing registration for lobby
         this.rpcSecret = cfg.getString("server.rpc_secret", "");
         this.hardcoreServerName = cfg.getString("server.hardcore", "");
-        RpcHandler rpcHandler = new RpcHandler(this, this, this.hardcoreServerName, this.rpcSecret);
+        RpcHandler rpcHandler = new RpcHandler(this, this, this.rpcSecret, RPC_CHANNEL);
         try {
             // Incoming channel
-            getServer().getMessenger().registerIncomingPluginChannel(this, "TheCycleRPC", rpcHandler);
+            getServer().getMessenger().registerIncomingPluginChannel(this, RPC_CHANNEL, rpcHandler);
             // Outgoing channel (used by lobby instances to forward RPCs)
-            getServer().getMessenger().registerOutgoingPluginChannel(this, "TheCycleRPC");
+            getServer().getMessenger().registerOutgoingPluginChannel(this, RPC_CHANNEL);
+            registeredRpcChannel = true;
+            getLogger().info("Registered RPC plugin channel: " + RPC_CHANNEL + " (role=" + (isHardcoreBackend ? "hardcore" : "lobby") + ")");
         } catch (Exception ex) {
-            getLogger().warning("Failed to register TheCycleRPC plugin channels: " + ex.getMessage());
+            registeredRpcChannel = false;
+            getLogger().warning("Failed to register " + RPC_CHANNEL + " plugin channels: " + ex.getMessage());
         }
 
         worldDeletionService.processPendingDeletions();
@@ -128,7 +139,7 @@ public class Main extends JavaPlugin implements Listener {
 
         Bukkit.getOnlinePlayers().forEach(p -> aliveMap.put(p.getUniqueId(), true));
 
-        getLogger().info("TheCyclePlugin enabled — cycle #" + cycleNumber.get());
+        getLogger().info("TheCyclePlugin enabled — cycle #" + cycleNumber.get() + "; role=" + (isHardcoreBackend ? "hardcore" : "lobby") + ", bungeeRegistered=" + registeredBungeeChannel + ", rpcRegistered=" + registeredRpcChannel);
     }
 
     /**
@@ -489,7 +500,7 @@ public class Main extends JavaPlugin implements Listener {
                  java.io.DataOutputStream out = new java.io.DataOutputStream(outStream)) {
                 out.writeUTF("Forward");
                 out.writeUTF(hardcoreServerName);
-                out.writeUTF("TheCycleRPC");
+                out.writeUTF(RPC_CHANNEL);
                 out.writeShort(payloadBytes.length);
                 out.write(payloadBytes);
                 out.flush();

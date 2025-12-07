@@ -68,6 +68,11 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             if (args[0].equalsIgnoreCase("cycle-now")) {
                 if (plugin instanceof Main) {
                     Main m = (Main) plugin;
+                    // Permission check: only allow forwarding/executing if sender has the command permission
+                    if (sender != null && !sender.hasPermission("thecycle.cycle")) {
+                        sender.sendMessage("You do not have permission to use that command.");
+                        return true;
+                    }
                     if (m.isHardcoreBackend()) {
                         m.triggerCycle();
                         sender.sendMessage("Cycling world now (executed on this hardcore backend).");

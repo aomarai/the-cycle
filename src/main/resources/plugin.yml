@@ -8,3 +8,8 @@ commands:
     usage: /cycle setcycle <n> | /cycle cycle-now | /cycle status
     permission: thecycle.cycle
     permission-message: You do not have permission to use that command.
+
+permissions:
+  thecycle.cycle:
+    description: Allows running /cycle and forwarding cycle requests from lobby to hardcore
+    default: op
