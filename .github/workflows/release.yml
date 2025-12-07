@@ -19,6 +19,8 @@ jobs:
     name: Build and Deploy
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'production' }}
+    permissions:
+      contents: write  # Required for uploading release assets
     
     steps:
     - name: Checkout repository
