@@ -1,0 +1,15 @@
+# Default config for HardcoreCyclePlugin
+features:
+  scoreboard: true
+  actionbar: true
+  bossbar: true
+
+webhook:
+  url: ""
+
+behavior:
+  cycle_when_no_online_players: true
+  delete_previous_worlds: true
+  defer_delete_until_restart: false
+  async_delete: true
+  shared_death: false

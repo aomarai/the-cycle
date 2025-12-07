@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/src/main/resources/config.yml">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/src/main/resources/config.yml" />
+              <option name="originalContent" value="# Default config for HardcoreCyclePlugin&#10;features:&#10;  scoreboard: true&#10;  actionbar: true&#10;  bossbar: true&#10;&#10;webhook:&#10;  url: &quot;&quot;&#10;&#10;behavior:&#10;  cycle_when_no_online_players: true&#10;  delete_previous_worlds: true&#10;  defer_delete_until_restart: false&#10;  async_delete: true&#10;&#10;" />
+              <option name="updatedContent" value="# Default config for HardcoreCyclePlugin&#10;features:&#10;  scoreboard: true&#10;  actionbar: true&#10;  bossbar: true&#10;&#10;webhook:&#10;  url: &quot;&quot;&#10;&#10;behavior:&#10;  cycle_when_no_online_players: true&#10;  delete_previous_worlds: true&#10;  defer_delete_until_restart: false&#10;  async_delete: true&#10;  shared_death: false" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
