@@ -45,6 +45,6 @@ jobs:
         echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Java Version**: 21" >> $GITHUB_STEP_SUMMARY
         echo "- **Build Tool**: Maven" >> $GITHUB_STEP_SUMMARY
-        if [ -f target/*.jar ]; then
+        if ls target/*.jar > /dev/null 2>&1; then
           echo "- **Artifacts**: Generated" >> $GITHUB_STEP_SUMMARY
         fi
