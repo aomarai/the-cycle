@@ -23,6 +23,15 @@ public class DeathListener implements Listener {
     private final Map<UUID, Boolean> aliveMap;
     private final List<Map<String, Object>> deathRecap;
 
+    /**
+     * Create the death listener that records death recaps and triggers cycles.
+     *
+     * @param plugin            plugin instance for scheduling/logging
+     * @param enableActionbar   whether to send an actionbar message on player death
+     * @param enableSharedDeath whether a single death kills all players (shared death)
+     * @param aliveMap          shared map tracking alive state per player UUID
+     * @param deathRecap        shared list where death recap entries are appended
+     */
     public DeathListener(JavaPlugin plugin, boolean enableActionbar, boolean enableSharedDeath, Map<UUID, Boolean> aliveMap, List<Map<String, Object>> deathRecap) {
         this.plugin = plugin;
         this.enableActionbar = enableActionbar;
@@ -31,6 +40,13 @@ public class DeathListener implements Listener {
         this.deathRecap = deathRecap;
     }
 
+    /**
+     * Handle a player's death: record a recap entry, optionally show an actionbar message
+     * to other players, and when everyone is dead trigger a world cycle (on the main thread).
+     *
+     * This method runs on the server thread and schedules a 1-tick delayed check to allow
+     * other death events to be processed first.
+     */
     @EventHandler
     @SuppressWarnings("deprecation")
     public void onPlayerDeath(PlayerDeathEvent ev) {
@@ -82,6 +98,10 @@ public class DeathListener implements Listener {
         }.runTaskLater(plugin, 1L);
     }
 
+    /**
+     * Optional handler that, when enabled, kills all players when one dies (shared-death)
+     * and triggers a cycle. Guarded by the enableSharedDeath flag.
+     */
     @EventHandler
     public void onAnyPlayerDeath(PlayerDeathEvent event) {
         if (!enableSharedDeath) return;

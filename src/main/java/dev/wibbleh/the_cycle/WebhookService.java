@@ -8,15 +8,31 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Helper service that sends JSON payloads to a configured webhook URL.
+ * Posts run asynchronously on the server scheduler to avoid blocking the main thread.
+ */
 public class WebhookService {
     private final JavaPlugin plugin;
     private final String webhookUrl;
 
+    /**
+     * Construct a WebhookService.
+     *
+     * @param plugin     plugin instance used for scheduling and logging
+     * @param webhookUrl target URL for POST requests (may be empty/null to disable)
+     */
     public WebhookService(JavaPlugin plugin, String webhookUrl) {
         this.plugin = plugin;
         this.webhookUrl = webhookUrl;
     }
 
+    /**
+     * Send a JSON payload to the configured webhook URL asynchronously.
+     * If the webhook URL is missing this is a no-op.
+     *
+     * @param payload JSON payload string to POST
+     */
     public void send(String payload) {
         if (webhookUrl == null || webhookUrl.trim().isEmpty()) return;
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -45,4 +61,3 @@ public class WebhookService {
         });
     }
 }
-

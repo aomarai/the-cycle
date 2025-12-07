@@ -44,6 +44,10 @@ public class Main extends JavaPlugin implements Listener {
     private DeathListener deathListener;
     private CommandHandler commandHandler;
 
+    /**
+     * Plugin enable lifecycle method. Loads configuration, wires helper services,
+     * registers listeners and initializes in-memory state.
+     */
     @Override
     public void onEnable() {
         saveDefaultConfig();
@@ -99,27 +103,49 @@ public class Main extends JavaPlugin implements Listener {
         getLogger().info("HardcoreCyclePlugin enabled — cycle #" + cycleNumber.get());
     }
 
+    /**
+     * Plugin disable lifecycle method. Persist cycle number to disk.
+     */
     @Override
     public void onDisable() {
         writeCycleFile(cycleNumber.get());
     }
 
+    /**
+     * Return the current cycle number.
+     *
+     * @return current cycle counter (1-based)
+     */
     public int getCycleNumber() {
         return cycleNumber.get();
     }
 
-    // Minimal wrappers so other classes can call into Main behaviour
+    /**
+     * Set the cycle number, persist to disk and update the scoreboard.
+     *
+     * @param n new cycle number
+     */
     public void setCycleNumber(int n) {
         cycleNumber.set(n);
         writeCycleFile(n);
         updateScoreboard();
     }
 
-    // public wrapper to allow other components to request a cycle
+    /**
+     * Public wrapper to trigger a world cycle from other components.
+     * Delegates to performCycle which does the heavy lifting.
+     */
     public void triggerCycle() {
         performCycle();
     }
 
+    /**
+     * Perform the world cycle: increment cycle number, persist, optionally send webhook,
+     * create a new world, move players into the new world (or lobby), and schedule deletion
+     * of the previous world according to configuration.
+     *
+     * This method is synchronized to avoid concurrent cycles.
+     */
     public synchronized void performCycle() {
         int next = cycleNumber.incrementAndGet();
         updateScoreboard();
@@ -210,6 +236,9 @@ public class Main extends JavaPlugin implements Listener {
         getLogger().info("Cycle " + next + " complete.");
     }
 
+    /**
+     * Ensure the plugin data folder exists. If creation fails a warning is logged.
+     */
     private void ensureDataFolderExists() {
         File df = getDataFolder();
         if (!df.exists()) {
@@ -221,6 +250,9 @@ public class Main extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Load the cycle number from disk. If the file is missing or invalid this defaults to 1.
+     */
     private void loadCycleNumber() {
         try {
             ensureDataFolderExists();
@@ -240,6 +272,11 @@ public class Main extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Persist the given cycle number to the plugin data folder (cycles.json).
+     *
+     * @param n cycle number to write
+     */
     private void writeCycleFile(int n) {
         try {
             ensureDataFolderExists();
@@ -251,11 +288,19 @@ public class Main extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Update the server scoreboard with the current cycle number when enabled.
+     */
     private void updateScoreboard() {
         if (!enableScoreboard || objective == null) return;
         objective.getScore("Cycle:").setScore(cycleNumber.get());
     }
 
+    /**
+     * Update the boss bar title for all players if boss bar support is enabled.
+     *
+     * @param message message to display to players
+     */
     private void pushBossbar(String message) {
         if (!enableBossBar || bossBar == null) return;
         bossBar.setTitle(message);
@@ -265,6 +310,13 @@ public class Main extends JavaPlugin implements Listener {
         });
     }
 
+    /**
+     * Build a JSON payload for the webhook based on the death recap.
+     *
+     * @param cycleNum cycle number
+     * @param recap    death recap list to include
+     * @return JSON string payload
+     */
     private String buildWebhookPayload(int cycleNum, List<Map<String, Object>> recap) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"content\":null,\"embeds\":[{\"title\":\"Hardcore cycle ")
@@ -292,7 +344,13 @@ public class Main extends JavaPlugin implements Listener {
         return sb.toString();
     }
 
-    // Basic JSON string escaper used by buildWebhookPayload
+    /**
+     * Escape a string for inclusion in a JSON string value. This is a minimal escaper
+     * suitable for simple text fields and does not replace all possible Unicode escapes.
+     *
+     * @param s input string
+     * @return escaped string safe for use inside a JSON string value
+     */
     private String escape(String s) {
         if (s == null) return "";
         return s.replace("\\", "\\\\")
@@ -300,9 +358,14 @@ public class Main extends JavaPlugin implements Listener {
                 .replace("\n", "\\n");
     }
 
-    // Send a player to the configured lobby. If lobbyServer is set and Bungee outgoing channel
-    // is registered, send a BungeeCord Connect request. Otherwise, if lobbyWorldName exists on this server,
-    // teleport the player to that world's spawn. If neither exists, log and leave player in place.
+    /**
+     * Send a player to the configured lobby. Priority:
+     * 1) If lobbyServer is configured and Bungee is registered, send a Bungee Connect message.
+     * 2) Else if lobbyWorldName exists on this server, teleport the player there.
+     * 3) Otherwise log a warning and leave the player in place.
+     *
+     * @param p player to move to lobby
+     */
     private void sendPlayerToLobby(Player p) {
         if (p == null) return;
         if (!lobbyServer.isEmpty() && registeredBungeeChannel) {
@@ -337,7 +400,9 @@ public class Main extends JavaPlugin implements Listener {
         getLogger().warning("No lobby configured; cannot move player " + p.getName() + ".");
     }
 
-    // Delegate command handling to CommandHandler
+    /**
+     * Handle plugin commands by delegating to the CommandHandler.
+     */
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         return commandHandler.handle(sender, cmd, label, args);

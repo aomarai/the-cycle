@@ -22,6 +22,10 @@ public class WorldDeletionService {
         this.pendingDeletesFile = new File(plugin.getDataFolder(), "pending_deletes.txt");
     }
 
+    /**
+     * Read the pending deletes file and schedule deletion attempts for each recorded world.
+     * If the file is empty it will be removed. Deletions are performed asynchronously.
+     */
     public void processPendingDeletions() {
         if (!pendingDeletesFile.exists()) return;
         List<String> lines = new ArrayList<>();
@@ -56,6 +60,15 @@ public class WorldDeletionService {
         }
     }
 
+    /**
+     * Schedule deletion of a world folder by name.
+     * Behavior respects the service configuration:
+     * - If deletes are disabled this is a no-op.
+     * - If deferDeleteUntilRestart is true the world name is recorded for later.
+     * - Else deletion happens synchronously or asynchronously depending on asyncDelete.
+     *
+     * @param worldName name of the world folder to delete
+     */
     public void scheduleDeleteWorldFolder(String worldName) {
         if (!deletePreviousWorlds) return;
         if (worldName == null || worldName.trim().isEmpty()) return;
@@ -83,6 +96,12 @@ public class WorldDeletionService {
         }
     }
 
+    /**
+     * Append a world name to the pending deletes file unless it's already present.
+     * This method is synchronized to avoid races when multiple threads attempt to record.
+     *
+     * @param worldName world folder name to record
+     */
     private synchronized void recordPendingDelete(String worldName) {
         plugin.getDataFolder().mkdirs();
         try {
@@ -106,6 +125,12 @@ public class WorldDeletionService {
         }
     }
 
+    /**
+     * Delete the world folder on disk. Returns true if deletion succeeded or folder did not exist.
+     *
+     * @param worldName name of the world folder to delete
+     * @return true when deletion was successful or folder absent; false on error
+     */
     private boolean deleteWorldFolder(String worldName) {
         try {
             File worldRoot = Bukkit.getWorldContainer();
@@ -118,6 +143,12 @@ public class WorldDeletionService {
         }
     }
 
+    /**
+     * Recursively delete a directory and its contents. Attempts to set files writable when delete fails.
+     *
+     * @param f directory or file to delete
+     * @return true on success, false on failure
+     */
     private boolean deleteRecursively(File f) {
         if (f == null || !f.exists()) return true;
         File[] children = f.listFiles();
@@ -146,4 +177,3 @@ public class WorldDeletionService {
         return true;
     }
 }
-

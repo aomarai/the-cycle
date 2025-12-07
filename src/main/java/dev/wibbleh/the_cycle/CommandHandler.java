@@ -5,13 +5,34 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 
+/**
+ * Simple command handler that provides a minimal interface for the /cycle command.
+ * The handler delegates to the Main plugin instance for operations that change state.
+ */
 public class CommandHandler {
     private final JavaPlugin plugin;
 
+    /**
+     * Create a new CommandHandler bound to the given plugin.
+     *
+     * @param plugin plugin instance used for callbacks
+     */
     public CommandHandler(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * Handle an incoming command. Supported subcommands:
+     * - setcycle <n>
+     * - cycle-now
+     * - status
+     *
+     * @param sender command sender
+     * @param cmd    command object
+     * @param label  command label (unused)
+     * @param args   command arguments
+     * @return true when the command was handled
+     */
     @SuppressWarnings("unused")
     public boolean handle(CommandSender sender, Command cmd, String label, String[] args) {
         String name = cmd.getName();
