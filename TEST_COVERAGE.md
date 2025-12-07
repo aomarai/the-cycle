@@ -9,6 +9,21 @@ This document provides an overview of the comprehensive unit test suite for the-
 - **All Tests Passing**: ✅ Yes
 - **Test Framework**: JUnit 5 with Mockito
 - **Java Version**: 21
+- **CI/CD**: ✅ GitHub Actions configured
+
+## Continuous Integration
+
+The project uses GitHub Actions to automatically run tests on every push and pull request. The CI pipeline:
+
+- ✅ Builds the project with Maven
+- ✅ Runs all 46 unit tests
+- ✅ Generates test reports
+- ✅ Uploads test results as artifacts
+- ✅ Fails the build if any tests fail
+
+**Workflow file**: `.github/workflows/maven-test.yml`
+
+To view test results, check the "Actions" tab in GitHub after pushing changes.
 
 ## Test Coverage by Component
 
