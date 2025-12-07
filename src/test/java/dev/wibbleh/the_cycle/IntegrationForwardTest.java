@@ -12,6 +12,8 @@ import org.mockito.MockedStatic;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.lang.reflect.Field;
+import org.bukkit.configuration.file.FileConfiguration;
+
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -39,6 +41,17 @@ class IntegrationForwardTest {
         Field secretField = Main.class.getDeclaredField("rpcSecret");
         secretField.setAccessible(true);
         secretField.set(main, "my-secret");
+
+        // Ensure cfg isn't null in the test (avoid NPE)
+        FileConfiguration mockCfg = mock(FileConfiguration.class);
+        lenient().when(mockCfg.getString("server.hardcore_http_url", "")).thenReturn("");
+        lenient().when(mockCfg.getString("server.rpc_secret", "")).thenReturn("my-secret");
+        lenient().when(mockCfg.getInt("server.http_port", 8080)).thenReturn(8080);
+        lenient().when(mockCfg.getString("server.http_bind", "")).thenReturn("");
+        lenient().when(mockCfg.getBoolean("server.http_enabled", false)).thenReturn(false);
+        Field cfgField = Main.class.getDeclaredField("cfg");
+        cfgField.setAccessible(true);
+        cfgField.set(main, mockCfg);
 
         // Ensure there is an online player to send the plugin message through
         try (MockedStatic<Bukkit> mocked = mockStatic(Bukkit.class)) {

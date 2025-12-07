@@ -49,11 +49,17 @@ public class Main extends JavaPlugin implements Listener {
      */
     private static final String RPC_CHANNEL = "thecycle:rpc";
     private boolean registeredRpcChannel = false;
-    // Webhook
-    private String webhookUrl;
-    private WorldDeletionService worldDeletionService;
-    private WebhookService webhookService;
-    private CommandHandler commandHandler;
+    // Outbound RPC queue used when the Bungee outgoing channel isn't available yet.
+    private final Deque<byte[]> outboundRpcQueue = new ArrayDeque<>();
+    private static final int MAX_RPC_QUEUE = 100;
+    private int rpcQueueTaskId = -1;
+ // Webhook
+     private String webhookUrl;
+     private WorldDeletionService worldDeletionService;
+     private WebhookService webhookService;
+     private CommandHandler commandHandler;
+    // Optional embedded HTTP RPC server (only started on hardcore backends when configured)
+    private HttpRpcServer httpRpcServer;
 
     /**
      * Plugin enable lifecycle method. Loads configuration, wires helper services,
@@ -75,14 +81,17 @@ public class Main extends JavaPlugin implements Listener {
         // lobby config
         lobbyServer = cfg.getString("lobby.server", "").trim();
         lobbyWorldName = cfg.getString("lobby.world", "").trim();
-        if (!lobbyServer.isEmpty()) {
-            // register Bungee outgoing channel so we can send Connect messages
-            try {
-                getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
-                registeredBungeeChannel = true;
-            } catch (Exception e) {
-                getLogger().warning("Could not register BungeeCord outgoing channel; cross-server lobby will not work. Reason: " + e.getMessage());
+        // Register Bungee outgoing channel early so forwards/connects can be sent at runtime.
+        try {
+            if (getServer() != null) {
+                if (!getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
+                    getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+                }
+                registeredBungeeChannel = getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord");
             }
+        } catch (Exception e) {
+            getLogger().warning("Could not register BungeeCord outgoing channel; cross-server lobby will not work. Reason: " + e.getMessage());
+            registeredBungeeChannel = false;
         }
 
         cycleFile = new File(getDataFolder(), "cycles.json");
@@ -109,6 +118,10 @@ public class Main extends JavaPlugin implements Listener {
         // Register RPC handler: incoming channel on hardcore, and provide outgoing registration for lobby
         this.rpcSecret = cfg.getString("server.rpc_secret", "");
         this.hardcoreServerName = cfg.getString("server.hardcore", "");
+        // Optional HTTP RPC URL for lobby to call (if present, prefer HTTP forwarding when available)
+        String hardcoreHttpUrl = cfg.getString("server.hardcore_http_url", "").trim();
+        int httpPort = cfg.getInt("server.http_port", 8080);
+        String httpBind = cfg.getString("server.http_bind", "");
         RpcHandler rpcHandler = new RpcHandler(this, this, this.rpcSecret, RPC_CHANNEL);
         try {
             // Incoming channel
@@ -122,7 +135,24 @@ public class Main extends JavaPlugin implements Listener {
             getLogger().warning("Failed to register " + RPC_CHANNEL + " plugin channels: " + ex.getMessage());
         }
 
+        // If we're configured as the hardcore backend and an HTTP server is desired, start embedded HTTP RPC server
+        try {
+            if (isHardcoreBackend && cfg.getBoolean("server.http_enabled", false)) {
+                httpRpcServer = new HttpRpcServer(this, httpPort, httpBind);
+                httpRpcServer.start();
+                getLogger().info("Started embedded HTTP RPC server on port " + httpPort + (httpBind.isEmpty() ? "" : " bound to " + httpBind));
+            }
+        } catch (Exception e) {
+            getLogger().warning("Failed to start embedded HTTP RPC server: " + e.getMessage());
+            httpRpcServer = null;
+        }
+
         worldDeletionService.processPendingDeletions();
+
+        // Schedule a periodic task to try to drain the outbound RPC queue (runs on main thread)
+        if (rpcQueueTaskId == -1) {
+            rpcQueueTaskId = Bukkit.getScheduler().runTaskTimer(this, this::drainRpcQueue, 20L, 20L).getTaskId();
+        }
 
         getServer().getPluginManager().registerEvents(dl, this);
 
@@ -470,48 +500,183 @@ public class Main extends JavaPlugin implements Listener {
      * @return true if message was sent; false otherwise
      */
     public boolean sendRpcToHardcore(String action, org.bukkit.command.CommandSender requester) {
-        if (action == null || action.isEmpty()) return false;
-        if (hardcoreServerName == null || hardcoreServerName.isEmpty()) {
-            getLogger().warning("Hardcore server name not configured; cannot forward RPC.");
-            return false;
-        }
+         if (action == null || action.isEmpty()) return false;
+         if (hardcoreServerName == null || hardcoreServerName.isEmpty()) {
+             getLogger().warning("Hardcore server name not configured; cannot forward RPC.");
+             return false;
+         }
 
-        // Determine player to send plugin message through
-        org.bukkit.entity.Player through = null;
-        if (requester instanceof org.bukkit.entity.Player) through = (org.bukkit.entity.Player) requester;
-        else {
-            for (org.bukkit.entity.Player p : Bukkit.getOnlinePlayers()) { through = p; break; }
-        }
-        if (through == null) {
-            getLogger().warning("No online player to send plugin message; cannot forward RPC to hardcore.");
-            return false;
-        }
+         // If configured, prefer HTTP forwarding (does not need a player). The config key server.hardcore_http_url
+         // should be a full URL like http://hardcore-host:8080/rpc
+         String hardcoreHttpUrl = cfg.getString("server.hardcore_http_url", "").trim();
+         if (!hardcoreHttpUrl.isEmpty()) {
+             try {
+                 String caller = requester instanceof org.bukkit.entity.Player ? ((org.bukkit.entity.Player) requester).getUniqueId().toString() : "console";
+                 String payload = "{\"action\":\"" + action + "\",\"caller\":\"" + caller + "\"}";
+                 String sig = RpcHttpUtil.computeHmacHex(rpcSecret, payload);
+                 java.net.URL u = new java.net.URL(hardcoreHttpUrl);
+                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+                 conn.setRequestMethod("POST");
+                 conn.setDoOutput(true);
+                 conn.setRequestProperty("Content-Type", "application/json");
+                 conn.setRequestProperty("X-Signature", sig);
+                 conn.setConnectTimeout(3000);
+                 conn.setReadTimeout(5000);
+                 try (OutputStream os = conn.getOutputStream()) {
+                     os.write(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                 }
+                 int code = conn.getResponseCode();
+                 if (code >= 200 && code < 300) {
+                     getLogger().info("Forwarded RPC via HTTP to " + hardcoreHttpUrl + " status=" + code);
+                     return true;
+                 } else {
+                     getLogger().warning("HTTP RPC forward returned non-2xx: " + code);
+                 }
+             } catch (Exception e) {
+                 getLogger().warning("HTTP RPC forward failed: " + e.getMessage());
+             }
+         }
 
-        try (java.io.ByteArrayOutputStream payloadStream = new java.io.ByteArrayOutputStream();
-             java.io.DataOutputStream payloadOut = new java.io.DataOutputStream(payloadStream)) {
-            String caller = requester instanceof org.bukkit.entity.Player ? ((org.bukkit.entity.Player) requester).getUniqueId().toString() : "console";
-            String payload = "rpc::" + (rpcSecret == null ? "" : rpcSecret) + "::" + action + "::" + caller;
-            payloadOut.writeUTF(payload);
-            payloadOut.flush();
-            byte[] payloadBytes = payloadStream.toByteArray();
+         // Determine player to send plugin message through
+         org.bukkit.entity.Player through = null;
+         if (requester instanceof org.bukkit.entity.Player) through = (org.bukkit.entity.Player) requester;
+         else {
+             for (org.bukkit.entity.Player p : Bukkit.getOnlinePlayers()) { through = p; break; }
+         }
+         if (through == null) {
+             getLogger().warning("No online player to send plugin message; cannot forward RPC to hardcore.");
+             return false;
+         }
 
-            // Build Bungee Forward packet: subchannel Forward, target server, channel, short length, data
-            try (java.io.ByteArrayOutputStream outStream = new java.io.ByteArrayOutputStream();
-                 java.io.DataOutputStream out = new java.io.DataOutputStream(outStream)) {
-                out.writeUTF("Forward");
-                out.writeUTF(hardcoreServerName);
-                out.writeUTF(RPC_CHANNEL);
-                out.writeShort(payloadBytes.length);
-                out.write(payloadBytes);
-                out.flush();
-                through.sendPluginMessage(this, "BungeeCord", outStream.toByteArray());
+         // Ensure the Bungee outgoing plugin channel is registered. Some runtime environments
+         // (unit tests) may not have a non-null server; in that case we skip registration so
+         // tests that mock Player.sendPluginMessage can still execute. At runtime we attempt
+         // a registration and abort if it fails.
+         if (!registeredBungeeChannel) {
+            try {
+                if (getServer() != null) {
+                    // Prefer the safer isOutgoingChannelRegistered check before registering
+                    if (!getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
+                        getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+                    }
+                    // verify registration
+                    if (getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
+                        registeredBungeeChannel = true;
+                    } else {
+                        getLogger().warning("Bungee outgoing channel registration did not take effect; cannot forward RPC.");
+                        return false;
+                    }
+                } else {
+                    // No server available (likely in unit test environment) — proceed without registration.
+                }
+            } catch (Exception e) {
+                getLogger().warning("Failed to register Bungee outgoing channel; cannot forward RPC: " + e.getMessage());
+                return false;
             }
+        }
 
-            getLogger().info("Forwarded RPC action '" + action + "' to hardcore server: " + hardcoreServerName);
-            return true;
-        } catch (Exception e) {
-            getLogger().warning("Failed to forward RPC to hardcore: " + e.getMessage());
-            return false;
+         try (java.io.ByteArrayOutputStream payloadStream = new java.io.ByteArrayOutputStream();
+              java.io.DataOutputStream payloadOut = new java.io.DataOutputStream(payloadStream)) {
+             String caller = requester instanceof org.bukkit.entity.Player ? ((org.bukkit.entity.Player) requester).getUniqueId().toString() : "console";
+             String payload = "rpc::" + (rpcSecret == null ? "" : rpcSecret) + "::" + action + "::" + caller;
+             payloadOut.writeUTF(payload);
+             payloadOut.flush();
+             byte[] payloadBytes = payloadStream.toByteArray();
+
+             // Build Bungee Forward packet: subchannel Forward, target server, channel, short length, data
+             try (java.io.ByteArrayOutputStream outStream = new java.io.ByteArrayOutputStream();
+                  java.io.DataOutputStream out = new java.io.DataOutputStream(outStream)) {
+                 out.writeUTF("Forward");
+                 out.writeUTF(hardcoreServerName);
+                 out.writeUTF(RPC_CHANNEL);
+                 out.writeShort(payloadBytes.length);
+                 out.write(payloadBytes);
+                 out.flush();
+                 // Attempt immediate send; if it fails due to unregistered channel, enqueue the packet for retry
+                 try {
+                    through.sendPluginMessage(this, "BungeeCord", outStream.toByteArray());
+                } catch (IllegalArgumentException iae) {
+                    getLogger().warning("Send failed due to unregistered channel; enqueueing RPC for retry: " + iae.getMessage());
+                    enqueueOutboundRpc(outStream.toByteArray());
+                    return true; // treat as accepted (queued)
+                } catch (Exception ex) {
+                    getLogger().warning("Send failed; enqueueing RPC for retry: " + ex.getMessage());
+                    enqueueOutboundRpc(outStream.toByteArray());
+                    return true;
+                }
+             }
+
+             getLogger().info("Forwarded RPC action '" + action + "' to hardcore server: " + hardcoreServerName);
+             return true;
+         } catch (Exception e) {
+             getLogger().warning("Failed to forward RPC to hardcore: " + e.getMessage());
+             return false;
+         }
+     }
+
+    /**
+     * Enqueue an outbound RPC packet (outer Bungee Forward packet) for later delivery.
+     * If the queue is full the oldest item is discarded to make room.
+     * This method is synchronized to be safe across threads (though callers should be on main thread).
+     *
+     * @param packet outer packet bytes to send later
+     */
+    private synchronized void enqueueOutboundRpc(byte[] packet) {
+        if (packet == null || packet.length == 0) return;
+        if (outboundRpcQueue.size() >= MAX_RPC_QUEUE) {
+            // drop oldest to avoid unbounded memory growth
+            outboundRpcQueue.pollFirst();
+            getLogger().warning("Outbound RPC queue full; dropping oldest queued RPC.");
+        }
+        outboundRpcQueue.addLast(packet);
+        getLogger().info("Enqueued RPC for later delivery; queue size=" + outboundRpcQueue.size());
+    }
+
+    /**
+     * Drain the outbound RPC queue, attempting to send queued packets when the Bungee channel is available.
+     * Runs on the main server thread via a scheduled task.
+     */
+    private synchronized void drainRpcQueue() {
+        if (outboundRpcQueue.isEmpty()) return;
+        // Ensure outgoing channel is registered
+        if (!registeredBungeeChannel) {
+            try {
+                if (getServer() != null) {
+                    if (!getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord")) {
+                        getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+                    }
+                    registeredBungeeChannel = getServer().getMessenger().isOutgoingChannelRegistered(this, "BungeeCord");
+                }
+            } catch (Exception e) {
+                getLogger().warning("Periodic RPC drain: failed to register Bungee outgoing channel: " + e.getMessage());
+                return;
+            }
+        }
+
+        if (!registeredBungeeChannel) return;
+
+        // Find a player to send through
+        org.bukkit.entity.Player through = null;
+        for (org.bukkit.entity.Player p : Bukkit.getOnlinePlayers()) { through = p; break; }
+        if (through == null) return;
+
+        // Try to send queued packets; stop on first failure to avoid tight retry loops
+        while (!outboundRpcQueue.isEmpty()) {
+            byte[] pkt = outboundRpcQueue.peekFirst();
+            if (pkt == null) { outboundRpcQueue.pollFirst(); continue; }
+            try {
+                through.sendPluginMessage(this, "BungeeCord", pkt);
+                outboundRpcQueue.pollFirst();
+                getLogger().info("Delivered queued RPC; remaining queue=" + outboundRpcQueue.size());
+            } catch (IllegalArgumentException iae) {
+                getLogger().warning("Queued RPC send failed due to unregistered channel during drain: " + iae.getMessage());
+                // give up this tick; will retry next scheduled run
+                break;
+            } catch (Exception e) {
+                getLogger().warning("Queued RPC send failed during drain: " + e.getMessage());
+                // give up this tick
+                break;
+            }
         }
     }
-}
+ }

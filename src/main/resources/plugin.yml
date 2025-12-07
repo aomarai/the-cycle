@@ -13,3 +13,9 @@ permissions:
   thecycle.cycle:
     description: Allows running /cycle and forwarding cycle requests from lobby to hardcore
     default: op
+
+channels:
+  # Declare plugin messaging channels used by this plugin. Some server/proxy environments
+  # prefer channels be declared in plugin.yml in addition to runtime registration.
+  - BungeeCord
+  - thecycle:rpc
