@@ -41,6 +41,8 @@ class CommandHandlerTest {
             sentMessages.add(invocation.getArgument(0));
             return null;
         }).when(mockSender).sendMessage(anyString());
+        // By default treat the mocked plugin as the hardcore backend to match typical tests
+        lenient().when(mockPlugin.isHardcoreBackend()).thenReturn(true);
     }
 
     @Test
@@ -97,7 +99,22 @@ class CommandHandlerTest {
         assertTrue(result);
         verify(mockPlugin).triggerCycle();
         assertEquals(1, sentMessages.size());
-        assertEquals("Cycling world now.", sentMessages.get(0));
+        assertEquals("Cycling world now (executed on this hardcore backend).", sentMessages.get(0));
+    }
+
+    @Test
+    void testHandleCycleNowForwarded() {
+        when(mockCommand.getName()).thenReturn("cycle");
+        // Simulate that this is a lobby instance
+        lenient().when(mockPlugin.isHardcoreBackend()).thenReturn(false);
+        lenient().when(mockPlugin.sendRpcToHardcore("cycle-now", mockSender)).thenReturn(true);
+
+        boolean result = handler.handle(mockSender, mockCommand, "cycle", new String[]{"cycle-now"});
+
+        assertTrue(result);
+        verify(mockPlugin, never()).triggerCycle();
+        assertEquals(1, sentMessages.size());
+        assertEquals("Cycle request forwarded to hardcore backend.", sentMessages.get(0));
     }
 
     @Test

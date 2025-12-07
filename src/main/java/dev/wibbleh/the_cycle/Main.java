@@ -36,6 +36,11 @@ public class Main extends JavaPlugin implements Listener {
     private boolean registeredBungeeChannel = false;
     // Cycle tracking
     private File cycleFile;
+    // Server role — when false this instance acts as a lobby and must not create/delete worlds
+    private boolean isHardcoreBackend = true;
+    // RPC / forwarding configuration
+    private String rpcSecret = "";
+    private String hardcoreServerName = "";
     // Webhook
     private String webhookUrl;
     private WorldDeletionService worldDeletionService;
@@ -50,6 +55,10 @@ public class Main extends JavaPlugin implements Listener {
     public void onEnable() {
         saveDefaultConfig();
         cfg = getConfig();
+
+        // Read server role (default: hardcore). If role is "lobby" the plugin will not create or delete worlds.
+        String role = cfg.getString("server.role", "hardcore").trim().toLowerCase(Locale.ROOT);
+        isHardcoreBackend = role.equals("hardcore");
 
         enableScoreboard = cfg.getBoolean("features.scoreboard", true);
         boolean enableActionbarLocal = cfg.getBoolean("features.actionbar", true);
@@ -80,6 +89,27 @@ public class Main extends JavaPlugin implements Listener {
         webhookService = new WebhookService(this, webhookUrl);
         DeathListener dl = new DeathListener(this, enableActionbarLocal, sharedDeath, aliveMap, deathRecap);
         commandHandler = new CommandHandler(this);
+
+        // Register command executor and tab completer so /cycle works and supports autocomplete
+        if (getCommand("cycle") != null) {
+            getCommand("cycle").setExecutor(commandHandler);
+            getCommand("cycle").setTabCompleter(commandHandler);
+        } else {
+            getLogger().warning("Command 'cycle' not defined in plugin.yml; tab-complete and execution will not be available.");
+        }
+
+        // Register RPC handler: incoming channel on hardcore, and provide outgoing registration for lobby
+        this.rpcSecret = cfg.getString("server.rpc_secret", "");
+        this.hardcoreServerName = cfg.getString("server.hardcore", "");
+        RpcHandler rpcHandler = new RpcHandler(this, this, this.hardcoreServerName, this.rpcSecret);
+        try {
+            // Incoming channel
+            getServer().getMessenger().registerIncomingPluginChannel(this, "TheCycleRPC", rpcHandler);
+            // Outgoing channel (used by lobby instances to forward RPCs)
+            getServer().getMessenger().registerOutgoingPluginChannel(this, "TheCycleRPC");
+        } catch (Exception ex) {
+            getLogger().warning("Failed to register TheCycleRPC plugin channels: " + ex.getMessage());
+        }
 
         worldDeletionService.processPendingDeletions();
 
@@ -145,6 +175,11 @@ public class Main extends JavaPlugin implements Listener {
      * This method is synchronized to avoid concurrent cycles.
      */
     public synchronized void performCycle() {
+        if (!isHardcoreBackend) {
+            // Prevent accidental world creation on lobby instances.
+                        getLogger().warning("World cycle attempted on a server configured as 'lobby'. This server will not create worlds. Please run /cycle on your hardcore backend.");
+            return;
+        }
         int next = cycleNumber.incrementAndGet();
         updateScoreboard();
         writeCycleFile(next);
@@ -404,5 +439,68 @@ public class Main extends JavaPlugin implements Listener {
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         return commandHandler.handle(sender, cmd, label, args);
+    }
+
+    /**
+     * Return whether this instance is configured as the hardcore backend.
+     *
+     * @return true when this server should create/delete worlds.
+     */
+    public boolean isHardcoreBackend() {
+        return isHardcoreBackend;
+    }
+
+    /**
+     * Send an RPC action to the configured hardcore backend using the BungeeCord Forward
+     * mechanism. Returns true when a send attempt was made (not a guarantee of execution).
+     *
+     * @param action action string (e.g. "cycle-now")
+     * @param requester the command sender requesting the action (may be null)
+     * @return true if message was sent; false otherwise
+     */
+    public boolean sendRpcToHardcore(String action, org.bukkit.command.CommandSender requester) {
+        if (action == null || action.isEmpty()) return false;
+        if (hardcoreServerName == null || hardcoreServerName.isEmpty()) {
+            getLogger().warning("Hardcore server name not configured; cannot forward RPC.");
+            return false;
+        }
+
+        // Determine player to send plugin message through
+        org.bukkit.entity.Player through = null;
+        if (requester instanceof org.bukkit.entity.Player) through = (org.bukkit.entity.Player) requester;
+        else {
+            for (org.bukkit.entity.Player p : Bukkit.getOnlinePlayers()) { through = p; break; }
+        }
+        if (through == null) {
+            getLogger().warning("No online player to send plugin message; cannot forward RPC to hardcore.");
+            return false;
+        }
+
+        try (java.io.ByteArrayOutputStream payloadStream = new java.io.ByteArrayOutputStream();
+             java.io.DataOutputStream payloadOut = new java.io.DataOutputStream(payloadStream)) {
+            String caller = requester instanceof org.bukkit.entity.Player ? ((org.bukkit.entity.Player) requester).getUniqueId().toString() : "console";
+            String payload = "rpc::" + (rpcSecret == null ? "" : rpcSecret) + "::" + action + "::" + caller;
+            payloadOut.writeUTF(payload);
+            payloadOut.flush();
+            byte[] payloadBytes = payloadStream.toByteArray();
+
+            // Build Bungee Forward packet: subchannel Forward, target server, channel, short length, data
+            try (java.io.ByteArrayOutputStream outStream = new java.io.ByteArrayOutputStream();
+                 java.io.DataOutputStream out = new java.io.DataOutputStream(outStream)) {
+                out.writeUTF("Forward");
+                out.writeUTF(hardcoreServerName);
+                out.writeUTF("TheCycleRPC");
+                out.writeShort(payloadBytes.length);
+                out.write(payloadBytes);
+                out.flush();
+                through.sendPluginMessage(this, "BungeeCord", outStream.toByteArray());
+            }
+
+            getLogger().info("Forwarded RPC action '" + action + "' to hardcore server: " + hardcoreServerName);
+            return true;
+        } catch (Exception e) {
+            getLogger().warning("Failed to forward RPC to hardcore: " + e.getMessage());
+            return false;
+        }
     }
 }

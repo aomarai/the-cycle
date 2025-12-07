@@ -13,3 +13,23 @@ behavior:
   defer_delete_until_restart: false
   async_delete: true
   shared_death: false
+
+# Server role controls whether this instance is responsible for creating/deleting worlds.
+# Values: "hardcore" (the backend that hosts the cyclical hardcore worlds) or "lobby"
+# When set to "lobby" the plugin will not create or delete worlds; it will only provide
+# lobby-side features such as scoreboard/bossbar and local-lobby teleportation.
+server:
+  role: "hardcore"
+  # Optional: name of the hardcore backend server (as defined in your proxy) that lobby
+  # instances can forward admin requests to. Used when server.role is "lobby".
+  hardcore: ""
+  # Optional shared secret for RPC forwarding. If set, forwarded RPCs must include this secret.
+  rpc_secret: ""
+
+# Lobby configuration (optional)
+lobby:
+  # If set, plugin will attempt to send players to this server name using the
+  # BungeeCord outgoing plugin channel (Connect). Leave empty if not using a proxy.
+  server: ""
+  # Local world name to teleport players to when a proxy is not used or as a fallback.
+  world: ""
