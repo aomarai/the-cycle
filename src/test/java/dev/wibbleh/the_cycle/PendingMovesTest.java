@@ -37,7 +37,7 @@ public class PendingMovesTest {
     }
 
     @Test
-    void testSaveWithNullFile() {
+    void shouldThrowIllegalArgumentExceptionWhenFileIsNull() {
         Set<UUID> lobbySet = new java.util.HashSet<>();
         Set<UUID> hardcoreSet = new java.util.HashSet<>();
         
