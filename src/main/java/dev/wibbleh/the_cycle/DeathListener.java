@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class DeathListener implements Listener {
+    private static final long SHARED_DEATH_COOLDOWN_MS = 5000;
+    
     private final JavaPlugin plugin;
     private final boolean enableActionbar;
     private final boolean enableSharedDeath;
@@ -56,48 +58,45 @@ public class DeathListener implements Listener {
     @EventHandler
     @SuppressWarnings("deprecation")
     public void onPlayerDeath(PlayerDeathEvent ev) {
-        Player dead = ev.getEntity();
-        UUID id = dead.getUniqueId();
+        var dead = ev.getEntity();
+        var id = dead.getUniqueId();
 
         aliveMap.put(id, false);
 
         // Mark this player to be moved to the lobby when they respawn (prevents them from being left behind)
-        if (plugin instanceof Main) {
+        if (plugin instanceof Main m) {
             try {
-                ((Main) plugin).addPendingLobbyMove(id);
+                m.addPendingLobbyMove(id);
                 plugin.getLogger().info("Marked player " + dead.getName() + " (" + id + ") for pending lobby move on respawn.");
             } catch (Exception ignored) {
                 plugin.getLogger().warning("Failed to mark pending lobby move for " + id + ": " + ignored.getMessage());
             }
         }
 
-        Map<String, Object> entry = new HashMap<>();
+        var entry = new HashMap<String, Object>();
         entry.put("name", dead.getName());
         entry.put("time", Instant.now().toString());
         entry.put("cause", ev.getDeathMessage());
         entry.put("location", dead.getLocation().getBlockX() + "," + dead.getLocation().getBlockY() + "," + dead.getLocation().getBlockZ());
 
-        List<String> drops = ev.getDrops().stream().map(i -> i.getType().name() + " x" + i.getAmount()).collect(Collectors.toList());
+        var drops = ev.getDrops().stream()
+                .map(i -> i.getType().name() + " x" + i.getAmount())
+                .collect(Collectors.toList());
         entry.put("drops", drops);
 
         deathRecap.add(entry);
 
         if (enableActionbar) {
             String msg = "Player " + dead.getName() + " died — " + ev.getDeathMessage();
-            Component comp = Component.text(msg);
+            var comp = Component.text(msg);
             Bukkit.getOnlinePlayers().forEach(p -> p.sendActionBar(comp));
         }
 
         new BukkitRunnable() {
             public void run() {
-                boolean anyAlive = false;
-                for (Player p : Bukkit.getOnlinePlayers()) {
-                    Boolean a = aliveMap.getOrDefault(p.getUniqueId(), true);
-                    if (a) {
-                        anyAlive = true;
-                        break;
-                    }
-                }
+                boolean anyAlive = Bukkit.getOnlinePlayers().stream()
+                        .anyMatch(p -> aliveMap.getOrDefault(p.getUniqueId(), true));
+                
                 if (!anyAlive) {
                     // If shared-death mode is enabled, the shared-death handler will trigger the cycle.
                     if (enableSharedDeath) {
@@ -111,8 +110,8 @@ public class DeathListener implements Listener {
                     }
                     plugin.getLogger().info("All players dead — starting world cycle.");
                     // call plugin's performCycle if available via main
-                    if (plugin instanceof Main) {
-                        ((Main) plugin).triggerCycle();
+                    if (plugin instanceof Main m) {
+                        m.triggerCycle();
                     }
                 }
             }
@@ -128,17 +127,21 @@ public class DeathListener implements Listener {
         if (!enableSharedDeath) return;
         // Rate-limit repeated shared-death triggers to once per 5 seconds
         long now = System.currentTimeMillis();
-        if (now - lastSharedDeathMs < 5000L) return;
+        if (now - lastSharedDeathMs < SHARED_DEATH_COOLDOWN_MS) return;
         if (!sharedDeathInProgress.compareAndSet(false, true)) return;
         lastSharedDeathMs = now;
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
                 plugin.getLogger().info("A player died — shared-death handler triggered.");
                 // Mark pending lobby move for all players (so dead players get moved on respawn)
-                if (plugin instanceof Main) {
-                    Main m = (Main) plugin;
-                    for (Player p : Bukkit.getOnlinePlayers()) {
-                        try { m.addPendingLobbyMove(p.getUniqueId()); plugin.getLogger().info("Marked player " + p.getName() + " for pending lobby move (shared-death)."); } catch (Exception ignored) { plugin.getLogger().warning("Failed to mark pending move for " + p.getName()); }
+                if (plugin instanceof Main m) {
+                    for (var p : Bukkit.getOnlinePlayers()) {
+                        try { 
+                            m.addPendingLobbyMove(p.getUniqueId()); 
+                            plugin.getLogger().info("Marked player " + p.getName() + " for pending lobby move (shared-death)."); 
+                        } catch (Exception ignored) { 
+                            plugin.getLogger().warning("Failed to mark pending move for " + p.getName()); 
+                        }
                     }
                     // Do NOT forcibly kill players here — killing generates many events and can cause recursion/lag.
                     // Instead, trigger the cycle; players will be moved on respawn (or via pending move handlers).
@@ -156,12 +159,12 @@ public class DeathListener implements Listener {
      */
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
-        Player p = event.getPlayer();
+        var p = event.getPlayer();
         // mark alive in the shared map
         aliveMap.put(p.getUniqueId(), true);
-        if (plugin instanceof Main) {
+        if (plugin instanceof Main m) {
             try {
-                ((Main) plugin).handlePlayerRespawn(p);
+                m.handlePlayerRespawn(p);
             } catch (Exception e) {
                 plugin.getLogger().warning("Error while handling player respawn: " + e.getMessage());
             }
@@ -173,10 +176,10 @@ public class DeathListener implements Listener {
      */
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Player p = event.getPlayer();
-        if (plugin instanceof Main) {
+        var p = event.getPlayer();
+        if (plugin instanceof Main m) {
             try {
-                ((Main) plugin).clearPendingFor(p.getUniqueId());
+                m.clearPendingFor(p.getUniqueId());
             } catch (Exception e) {
                 plugin.getLogger().warning("Error while clearing pending moves on quit: " + e.getMessage());
             }

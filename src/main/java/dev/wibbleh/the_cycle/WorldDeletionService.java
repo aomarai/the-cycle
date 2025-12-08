@@ -32,8 +32,8 @@ public class WorldDeletionService {
      */
     public void processPendingDeletions() {
         if (!pendingDeletesFile.exists()) return;
-        List<String> lines = new ArrayList<>();
-        try (BufferedReader r = new BufferedReader(new FileReader(pendingDeletesFile))) {
+        var lines = new ArrayList<String>();
+        try (var r = new BufferedReader(new FileReader(pendingDeletesFile))) {
             String l;
             while ((l = r.readLine()) != null) {
                 if (!l.trim().isEmpty()) lines.add(l.trim());
@@ -107,15 +107,15 @@ public class WorldDeletionService {
      * @param worldName world folder name to record
      */
     private synchronized void recordPendingDelete(String worldName) {
-        File df = plugin.getDataFolder();
+        var df = plugin.getDataFolder();
         if (!df.exists()) {
             boolean created = df.mkdirs();
             if (!created) plugin.getLogger().warning("Failed to create data folder: " + df.getAbsolutePath());
         }
         try {
-            List<String> existing = new ArrayList<>();
+            var existing = new ArrayList<String>();
             if (pendingDeletesFile.exists()) {
-                try (BufferedReader r = new BufferedReader(new FileReader(pendingDeletesFile))) {
+                try (var r = new BufferedReader(new FileReader(pendingDeletesFile))) {
                     String l;
                     while ((l = r.readLine()) != null) {
                         if (!l.trim().isEmpty()) existing.add(l.trim());
@@ -123,7 +123,7 @@ public class WorldDeletionService {
                 }
             }
             if (!existing.contains(worldName)) {
-                try (BufferedWriter w = new BufferedWriter(new FileWriter(pendingDeletesFile, true))) {
+                try (var w = new BufferedWriter(new FileWriter(pendingDeletesFile, true))) {
                     w.write(worldName);
                     w.newLine();
                 }
@@ -143,13 +143,13 @@ public class WorldDeletionService {
      */
     private boolean deleteWorldFolder(String worldName) {
         try {
-            File worldRoot = Bukkit.getWorldContainer();
+            var worldRoot = Bukkit.getWorldContainer();
             if (worldRoot == null) {
                 plugin.getLogger().warning("World container is null; cannot delete world: " + worldName);
                 return false;
             }
 
-            File worldFolder = new File(worldRoot, worldName);
+            var worldFolder = new File(worldRoot, worldName);
             if (!worldFolder.exists()) return true;
 
             // Resolve canonical paths to avoid symlink/path-traversal issues
@@ -171,9 +171,9 @@ public class WorldDeletionService {
             // Attempt an atomic (or best-effort) rename/move of the world folder to a temporary name. This
             // reduces the chance of partially deleting the original folder (helps on interruptions or errors).
             String tempName = worldName + ".deleting." + UUID.randomUUID();
-            File tempFolder = new File(worldRoot, tempName);
+            var tempFolder = new File(worldRoot, tempName);
             
-            File folderToDelete = attemptAtomicMove(worldFolder, tempFolder);
+            var folderToDelete = attemptAtomicMove(worldFolder, tempFolder);
             return deleteRecursively(folderToDelete);
         } catch (IOException ioe) {
             plugin.getLogger().warning("deleteWorldFolder failed (IO): " + ioe.getMessage());
