@@ -50,6 +50,13 @@
             <version>5.8.0</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- JSON Simple for RPC queue persistence -->
+        <dependency>
+            <groupId>com.googlecode.json-simple</groupId>
+            <artifactId>json-simple</artifactId>
+            <version>1.1.1</version>
+        </dependency>
     </dependencies>
 
     <repositories>
