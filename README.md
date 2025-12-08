@@ -10,6 +10,10 @@ Quick summary
 - Configure `config.yml` in each server using the `server.role` option (`hardcore` or `lobby`).
 - The lobby forwards cycle requests to the hardcore backend via either the proxy plugin channel (BungeeCord) or HTTP RPC.
 - The hardcore backend moves players out of the previous world before generating the next world, with a configurable delay and an optional polling timeout to ensure players have left.
+- **NEW**: Ender dragon kills are tracked, with attempts counter showing cycles between successful completions
+- **NEW**: Large title screens shown when cycles start and when the dragon is defeated
+- **NEW**: Players who join during an active cycle are kept in lobby until the next cycle
+- **NEW**: Automatic cycle starting when players join the lobby (configurable)
 
 Installation
 ------------
@@ -44,9 +48,10 @@ behavior:
   countdown_broadcast_to_all: true
   delay_before_generation_seconds: 3
   wait_for_players_to_leave_seconds: 30
+  auto_start_cycles: true  # Automatically start new cycles when players join the lobby
 
 features:
-  scoreboard: true
+  scoreboard: true  # Shows cycle number, attempts, and wins
   actionbar: true
   bossbar: true
 
@@ -58,6 +63,16 @@ Key configuration notes
 - `server.hardcore` on lobby instances must match the `servers` name defined in your proxy (Bungee/Velocity) to allow forwarding via plugin messaging.
 - `rpc_secret` — shared secret used for HMAC signing when using the HTTP RPC features. Keep it identical on lobby and hardcore.
 - `http_enabled` and `http_port` — when enabled the plugin starts a tiny embedded HTTP server and supports POST /rpc for simple RPCs. This is optional but recommended when the lobby and hardcore are on different machines.
+- `behavior.auto_start_cycles` — when true (default), the lobby will automatically request new cycles when players are waiting. Set to false if you want manual control.
+
+Features
+--------
+- **Cycle Management**: Automatic world cycling when players die
+- **Dragon Tracking**: Tracks ender dragon kills and attempts between wins
+- **Statistics**: Scoreboard shows current cycle, attempts since last win, and total wins
+- **Title Screens**: Large dramatic titles when cycles start and when the dragon is defeated
+- **Mid-Cycle Join Protection**: Players who join during an active cycle wait in lobby until next cycle
+- **Automatic Cycles**: Lobby can auto-start new cycles when players join (configurable)
 
 Behavior & flow
 ---------------

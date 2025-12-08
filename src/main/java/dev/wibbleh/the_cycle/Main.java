@@ -86,6 +86,8 @@ public class Main extends JavaPlugin implements Listener {
     private boolean countdownBroadcastToAll = true;
     // Optional UUID of the player who requested the last cycle; used to scope countdown messages when configured
     private volatile UUID lastCycleRequester = null;
+    // Track if a cycle start request is pending (to avoid duplicate auto-starts)
+    private volatile boolean cycleStartPending = false;
     // Pending moves for players who are dead at move time; they will be moved on respawn
     private final Set<UUID> pendingLobbyMoves = Collections.synchronizedSet(new HashSet<>());
     private final Set<UUID> pendingHardcoreMoves = Collections.synchronizedSet(new HashSet<>());
@@ -1032,6 +1034,9 @@ public class Main extends JavaPlugin implements Listener {
      * Schedule a countdown in chat on the lobby and then move players to the configured hardcore server.
      */
     public void scheduleCountdownThenMovePlayersToHardcore(int seconds) {
+        // Clear the cycle start pending flag since world is now ready
+        clearCycleStartPending();
+        
         String target = getHardcoreServerName();
         if (target == null || target.isEmpty()) {
             LOG.warning("Hardcore server name not configured; cannot move players to hardcore.");
@@ -1295,5 +1300,58 @@ public class Main extends JavaPlugin implements Listener {
      */
     public void addPlayerToCurrentCycle(UUID playerId) {
         playersInCurrentCycle.add(playerId);
+    }
+
+    /**
+     * Check if we should auto-start a new cycle on the lobby server.
+     * This is called when players join the lobby and there's no active cycle.
+     * Only starts a cycle if not already pending and if configured to auto-start.
+     */
+    public void checkAndAutoStartCycle() {
+        // Only run on lobby servers
+        if (isHardcoreBackend) {
+            return;
+        }
+
+        // Check if auto-start is already pending
+        if (cycleStartPending) {
+            LOG.info("Cycle start already pending, skipping auto-start check.");
+            return;
+        }
+
+        // Check if there are players waiting in lobby
+        long playersInLobby = Bukkit.getOnlinePlayers().stream()
+            .filter(p -> !p.getWorld().getName().startsWith("hardcore_cycle_"))
+            .count();
+
+        if (playersInLobby == 0) {
+            LOG.info("No players in lobby, skipping auto-start.");
+            return;
+        }
+
+        // Mark cycle start as pending
+        cycleStartPending = true;
+        LOG.info("Auto-starting new cycle - " + playersInLobby + " player(s) waiting in lobby.");
+
+        // Send RPC to hardcore to trigger a new cycle
+        boolean forwarded = sendRpcToHardcore("cycle-now", null);
+        if (forwarded) {
+            // Notify players that a new cycle is being prepared
+            Bukkit.getOnlinePlayers().forEach(p -> {
+                if (!p.getWorld().getName().startsWith("hardcore_cycle_")) {
+                    p.sendMessage("§aA new cycle is starting! Please wait while the world is being generated...");
+                }
+            });
+        } else {
+            LOG.warning("Failed to auto-start cycle - RPC forwarding failed.");
+            cycleStartPending = false;
+        }
+    }
+
+    /**
+     * Clear the cycle start pending flag (called when world is ready or on error).
+     */
+    public void clearCycleStartPending() {
+        cycleStartPending = false;
     }
 }
