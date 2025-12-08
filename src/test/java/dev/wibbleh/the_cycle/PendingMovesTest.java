@@ -55,7 +55,7 @@ public class PendingMovesTest {
     }
 
     @Test
-    void testLoadNonExistentFile(@TempDir Path tempDir) throws IOException {
+    void shouldNotClearSetsWhenLoadingNonExistentFile(@TempDir Path tempDir) throws IOException {
         Set<UUID> lobbySet = new java.util.HashSet<>();
         Set<UUID> hardcoreSet = new java.util.HashSet<>();
         lobbySet.add(UUID.randomUUID());
