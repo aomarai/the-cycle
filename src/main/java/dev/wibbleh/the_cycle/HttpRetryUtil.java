@@ -16,6 +16,13 @@ public final class HttpRetryUtil {
     private static final int DEFAULT_MAX_RETRIES = 3;
     private static final int DEFAULT_BASE_DELAY_MS = 100;
     private static final int DEFAULT_MAX_DELAY_MS = 5000;
+    private static final int DEFAULT_CONNECT_TIMEOUT_MS = 3000;
+    private static final int DEFAULT_READ_TIMEOUT_MS = 5000;
+    private static final int JITTER_DIVISOR = 4;
+    private static final int HTTP_OK_MIN = 200;
+    private static final int HTTP_OK_MAX = 300;
+    private static final int HTTP_CLIENT_ERROR_MIN = 400;
+    private static final int HTTP_CLIENT_ERROR_MAX = 500;
 
     private HttpRetryUtil() {
         // Utility class
@@ -39,8 +46,8 @@ public final class HttpRetryUtil {
                     DEFAULT_MAX_RETRIES,
                     DEFAULT_BASE_DELAY_MS,
                     DEFAULT_MAX_DELAY_MS,
-                    3000,
-                    5000
+                    DEFAULT_CONNECT_TIMEOUT_MS,
+                    DEFAULT_READ_TIMEOUT_MS
             );
         }
 
@@ -48,7 +55,7 @@ public final class HttpRetryUtil {
          * Create retry configuration without retries (single attempt).
          */
         public static RetryConfig noRetry() {
-            return new RetryConfig(0, 0, 0, 3000, 5000);
+            return new RetryConfig(0, 0, 0, DEFAULT_CONNECT_TIMEOUT_MS, DEFAULT_READ_TIMEOUT_MS);
         }
     }
 
@@ -99,7 +106,7 @@ public final class HttpRetryUtil {
             HttpURLConnection conn = null;
 
             try {
-                URL u = new URL(url);
+                var u = new URL(url);
                 conn = (HttpURLConnection) u.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
@@ -110,15 +117,15 @@ public final class HttpRetryUtil {
                 conn.setConnectTimeout(config.connectTimeoutMs);
                 conn.setReadTimeout(config.readTimeoutMs);
 
-                try (OutputStream os = conn.getOutputStream()) {
+                try (var os = conn.getOutputStream()) {
                     os.write(payload.getBytes(StandardCharsets.UTF_8));
                 }
 
                 int code = conn.getResponseCode();
-                if (code >= 200 && code < 300) {
+                if (code >= HTTP_OK_MIN && code < HTTP_OK_MAX) {
                     LOG.fine("HTTP POST to " + url + " succeeded with status " + code + " (attempt " + attempts + ")");
                     return HttpResult.success(code, attempts);
-                } else if (code >= 400 && code < 500) {
+                } else if (code >= HTTP_CLIENT_ERROR_MIN && code < HTTP_CLIENT_ERROR_MAX) {
                     // Client errors (4xx) are not retryable
                     String error = "HTTP POST returned " + code + " (client error, not retrying)";
                     LOG.warning(error);
@@ -173,7 +180,7 @@ public final class HttpRetryUtil {
         // Cap at max delay
         int cappedDelay = Math.min(exponentialDelay, maxDelayMs);
         // Add jitter (up to 25% of the delay) using ThreadLocalRandom for thread safety
-        int jitter = ThreadLocalRandom.current().nextInt(cappedDelay / 4 + 1);
+        int jitter = ThreadLocalRandom.current().nextInt(cappedDelay / JITTER_DIVISOR + 1);
         return cappedDelay + jitter;
     }
 }

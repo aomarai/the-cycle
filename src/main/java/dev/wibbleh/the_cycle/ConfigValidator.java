@@ -12,6 +12,11 @@ import java.util.logging.Logger;
  */
 public final class ConfigValidator {
     private static final Logger LOG = Logger.getLogger("HardcoreCycle");
+    private static final int MIN_PORT = 1;
+    private static final int MAX_PORT = 65535;
+    private static final int MIN_SECRET_LENGTH = 16;
+    private static final int MAX_COUNTDOWN_SECONDS = 300;
+    private static final int MAX_DELAY_SECONDS = 60;
 
     private ConfigValidator() {
         // Utility class
@@ -49,8 +54,8 @@ public final class ConfigValidator {
      * @return validation result with warnings and errors
      */
     public static ValidationResult validate(FileConfiguration cfg) {
-        List<String> warnings = new ArrayList<>();
-        List<String> errors = new ArrayList<>();
+        var warnings = new ArrayList<String>();
+        var errors = new ArrayList<String>();
 
         if (cfg == null) {
             errors.add("Configuration is null");
@@ -81,15 +86,15 @@ public final class ConfigValidator {
         boolean httpEnabled = cfg.getBoolean("server.http_enabled", false);
         if (httpEnabled) {
             int httpPort = cfg.getInt("server.http_port", 8080);
-            if (httpPort < 1 || httpPort > 65535) {
-                errors.add("Invalid server.http_port: " + httpPort + " (must be 1-65535)");
+            if (httpPort < MIN_PORT || httpPort > MAX_PORT) {
+                errors.add("Invalid server.http_port: " + httpPort + " (must be " + MIN_PORT + "-" + MAX_PORT + ")");
             }
 
             String rpcSecret = cfg.getString("server.rpc_secret", "").trim();
             if (rpcSecret.isEmpty()) {
                 warnings.add("HTTP RPC is enabled but 'server.rpc_secret' is empty (authentication disabled)");
-            } else if (rpcSecret.length() < 16) {
-                warnings.add("RPC secret is short (" + rpcSecret.length() + " chars); recommend at least 16 characters");
+            } else if (rpcSecret.length() < MIN_SECRET_LENGTH) {
+                warnings.add("RPC secret is short (" + rpcSecret.length() + " chars); recommend at least " + MIN_SECRET_LENGTH + " characters");
             }
         }
 
@@ -107,17 +112,17 @@ public final class ConfigValidator {
         int delayGeneration = cfg.getInt("behavior.delay_before_generation_seconds", 3);
         int waitPlayers = cfg.getInt("behavior.wait_for_players_to_leave_seconds", 30);
 
-        if (countdownLobby < 0 || countdownLobby > 300) {
-            warnings.add("countdown_send_to_lobby_seconds is " + countdownLobby + " (recommend 0-300)");
+        if (countdownLobby < 0 || countdownLobby > MAX_COUNTDOWN_SECONDS) {
+            warnings.add("countdown_send_to_lobby_seconds is " + countdownLobby + " (recommend 0-" + MAX_COUNTDOWN_SECONDS + ")");
         }
-        if (countdownHardcore < 0 || countdownHardcore > 300) {
-            warnings.add("countdown_send_to_hardcore_seconds is " + countdownHardcore + " (recommend 0-300)");
+        if (countdownHardcore < 0 || countdownHardcore > MAX_COUNTDOWN_SECONDS) {
+            warnings.add("countdown_send_to_hardcore_seconds is " + countdownHardcore + " (recommend 0-" + MAX_COUNTDOWN_SECONDS + ")");
         }
-        if (delayGeneration < 0 || delayGeneration > 60) {
-            warnings.add("delay_before_generation_seconds is " + delayGeneration + " (recommend 0-60)");
+        if (delayGeneration < 0 || delayGeneration > MAX_DELAY_SECONDS) {
+            warnings.add("delay_before_generation_seconds is " + delayGeneration + " (recommend 0-" + MAX_DELAY_SECONDS + ")");
         }
-        if (waitPlayers < 0 || waitPlayers > 300) {
-            warnings.add("wait_for_players_to_leave_seconds is " + waitPlayers + " (recommend 0-300)");
+        if (waitPlayers < 0 || waitPlayers > MAX_COUNTDOWN_SECONDS) {
+            warnings.add("wait_for_players_to_leave_seconds is " + waitPlayers + " (recommend 0-" + MAX_COUNTDOWN_SECONDS + ")");
         }
 
         // Validate webhook URL if configured
