@@ -291,6 +291,15 @@ class MainTest {
         when(mockPlayer.isDead()).thenReturn(true);
         when(mockPlayer.getName()).thenReturn("DeadPlayer");
         
+        // Initialize required private fields using reflection
+        java.lang.reflect.Field lobbyServerField = Main.class.getDeclaredField("lobbyServer");
+        lobbyServerField.setAccessible(true);
+        lobbyServerField.set(plugin, "");
+        
+        java.lang.reflect.Field lobbyWorldNameField = Main.class.getDeclaredField("lobbyWorldName");
+        lobbyWorldNameField.setAccessible(true);
+        lobbyWorldNameField.set(plugin, "");
+        
         // Access private sendPlayerToLobby method
         Method sendPlayerToLobbyMethod = Main.class.getDeclaredMethod("sendPlayerToLobby", org.bukkit.entity.Player.class);
         sendPlayerToLobbyMethod.setAccessible(true);
@@ -311,6 +320,11 @@ class MainTest {
         lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
         when(mockPlayer.isDead()).thenReturn(true);
         when(mockPlayer.getName()).thenReturn("DeadPlayer");
+        
+        // Initialize required private field using reflection
+        java.lang.reflect.Field registeredBungeeChannelField = Main.class.getDeclaredField("registeredBungeeChannel");
+        registeredBungeeChannelField.setAccessible(true);
+        registeredBungeeChannelField.set(plugin, true);
         
         // Invoke the method
         boolean result = plugin.sendPlayerToServer(mockPlayer, "hardcore");
