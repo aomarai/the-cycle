@@ -88,7 +88,9 @@ public class DeathListener implements Listener {
         Bukkit.getOnlinePlayers().forEach(p -> {
             try {
                 p.sendMessage(deathComponent);
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to send death message to player " + p.getName() + ": " + e.getMessage());
+            }
         });
 
         if (enableActionbar) {
