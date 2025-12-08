@@ -32,7 +32,8 @@ Thank you for your interest in contributing to The Cycle! This document provides
 
 4. **Verify the Build**
    - Check that `target/the-cycle-1.0.0.jar` was created
-   - Ensure there are no build errors
+   - Run tests: `mvn test`
+   - All tests should pass
 
 ## Development Workflow
 
@@ -144,66 +145,107 @@ public CompletableFuture<Boolean> deleteWorldAsync(File worldFolder) {
 
 ## Testing
 
+### Test Coverage
+
+The project has comprehensive unit test coverage:
+- **121+ unit tests** across 15+ test classes
+- **JUnit 5** with Mockito for mocking
+- **~38% line coverage** with room for expansion
+- All tests must pass before merging
+
 ### Running Tests
 
 ```bash
+# Set Java home (if needed)
+export JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64
+
 # Run all tests
 mvn test
 
-# Run specific test
-mvn test -Dtest=YourTestClass
+# Run specific test class
+mvn test -Dtest=CommandHandlerTest
 
-# Build and test
-mvn clean verify
+# Run with coverage report
+mvn clean test jacoco:report
 ```
 
 ### Writing Tests
 
-- Add tests for new features
-- Follow existing test patterns
-- Test both success and failure cases
-- Use descriptive test names
+When adding new features or fixing bugs:
+
+1. **Add tests for new functionality**
+   - Follow existing test patterns in `src/test/java`
+   - Use JUnit 5 and Mockito for mocking
+   - Test both success and failure cases
+
+2. **Test Naming Conventions**
+   - Use descriptive method names: `testMethodName_Scenario_ExpectedBehavior`
+   - Example: `testSetCycle_ValidNumber_UpdatesCycleNumber`
+
+3. **What to Test**
+   - All public methods
+   - Edge cases (null, empty, invalid inputs)
+   - Error handling and exceptions
+   - Configuration-dependent behavior
+
+4. **What Not to Unit Test**
+   - Bukkit server runtime integration (requires integration tests)
+   - File system operations (mock File objects)
+   - Network calls (mock HTTP clients)
+   - Multi-threading behavior
+
+### Test Guidelines
+
+- Keep tests isolated and independent
+- Use `@Mock` and `@InjectMocks` for dependency injection
+- Mock Bukkit static methods with `MockedStatic`
+- Verify expected behavior with assertions
+- Clean up resources in `@AfterEach` methods
 
 ## CI/CD Pipeline
 
 ### Continuous Integration
 
-Every pull request triggers automated CI checks:
+Every pull request and push triggers automated CI checks via GitHub Actions:
 
-1. **Build Verification** - Ensures code compiles
-2. **Test Execution** - Runs all tests
-3. **Artifact Generation** - Creates JAR file
+1. **Build Verification** - Ensures code compiles with Maven
+2. **Test Execution** - Runs all unit tests  
+3. **Code Coverage** - Generates JaCoCo reports uploaded to Codecov
+4. **Artifact Generation** - Creates the plugin JAR file
 
 ### Viewing CI Results
 
-- Check the PR for status checks
-- Click "Details" to view logs
-- Fix any failures before merging
+- Check the PR for automated status checks
+- Click "Details" on any check to view logs
+- Review test results and coverage in the Actions tab
+- Fix any failures before requesting review
 
-### Manual CI Trigger
+### Manual Workflow Trigger
 
-You can manually trigger CI workflows:
-1. Go to the Actions tab
-2. Select the workflow (CI or Release)
+To manually run CI workflows:
+1. Navigate to the "Actions" tab on GitHub
+2. Select the desired workflow
 3. Click "Run workflow"
 
 ## Documentation
 
-When making changes that affect users:
+When making changes that affect users or developers:
 
 1. **Update README.md**
-   - Add new configuration options
-   - Document new commands
-   - Update examples
+   - Document new configuration options
+   - Add or update command descriptions
+   - Include usage examples
+   - Update troubleshooting section if needed
 
 2. **Update JavaDocs**
-   - Document public APIs
-   - Include usage examples
-   - Note any side effects
+   - Document all public APIs
+   - Include parameter descriptions and return values
+   - Add usage examples for complex methods
+   - Note any side effects or important behavior
 
-3. **Update CHANGELOG** (if exists)
-   - List changes under "Unreleased"
-   - Follow existing format
+3. **Keep CONTRIBUTING.md Current**
+   - Update build or test instructions if they change
+   - Document new development tools or requirements
 
 ## Reporting Issues
 
