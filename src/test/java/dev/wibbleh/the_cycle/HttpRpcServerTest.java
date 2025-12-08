@@ -63,7 +63,7 @@ class HttpRpcServerTest {
     }
 
     @Test
-    void testRejectsNonPostRequests() throws IOException {
+    void shouldRejectRequestsWithNonPostMethod() throws IOException {
         int port = getNextPort();
         HttpRpcServer server = new HttpRpcServer(mockPlugin, port, "127.0.0.1");
         try {
