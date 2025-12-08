@@ -118,7 +118,7 @@ The plugin includes several features to ensure reliable operation:
 
 2. **Configuration Validation**: On startup, the plugin validates your configuration and reports errors/warnings. Invalid configurations prevent the plugin from starting, catching issues early.
 
-3. **Persistent RPC Queue** (infrastructure present, integration pending): Infrastructure for persisting failed RPC messages to disk exists, but is not yet wired into the main plugin logic. Full integration is planned for a future release.
+3. **Persistent RPC Queue**: Failed RPC messages are persisted to disk (`failed_rpcs.json`) and automatically retried every 60 seconds. This ensures no messages are lost during server maintenance or unexpected shutdowns. Expired messages (>24 hours old) are automatically cleaned up.
 
 4. **Health Monitoring**: The `/health` endpoint enables external monitoring and alerting systems to track server status.
 
