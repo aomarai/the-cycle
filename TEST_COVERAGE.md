@@ -4,27 +4,51 @@ This document provides an overview of the comprehensive unit test suite for the-
 
 ## Test Statistics
 
-- **Total Tests**: 42
-- **Test Classes**: 5
+- **Total Tests**: 72 (up from 42)
+- **Test Classes**: 11
 - **All Tests Passing**: ✅ Yes
 - **Test Framework**: JUnit 5 with Mockito
 - **Java Version**: 21
 - **CI/CD**: ✅ GitHub Actions configured
+- **Code Coverage**: ~33% line coverage
+
+## New Test Additions
+
+**HttpRpcServer** (9 new tests)
+- HTTP POST method validation
+- Signature verification (HMAC-SHA256)
+- Valid signature acceptance
+- Action routing (cycle-now, world-ready, move-players)
+- Unknown action handling
+- Server start/stop lifecycle
+- Null/empty bind address handling
+
+**PendingMovesStorage** (13 additional tests)
+- Null file handling
+- Non-existent file loading
+- Null/empty sets handling
+- Invalid JSON parsing
+- Malformed UUID handling
+- Mixed valid/invalid UUIDs
+- Parent directory creation
+- Multiple UUIDs save/load
+- Set clearing behavior
 
 ## Continuous Integration
 
 The project uses GitHub Actions to automatically run tests on every push and pull request. The CI pipeline:
 
 - ✅ Builds the project with Maven
-- ✅ Runs all 42 unit tests
+- ✅ Runs all 72 unit tests
+- ✅ Generates JaCoCo code coverage reports
+- ✅ Uploads coverage to Codecov
 - ✅ Generates test reports
-- ✅ Uploads test results as artifacts
+- ✅ Uploads test results and coverage as artifacts
 - ✅ Fails the build if any tests fail
-- ✅ Has proper permissions for test reporting on pull requests
 
 **Workflow file**: `.github/workflows/maven-test.yml`
 
-To view test results, check the "Actions" tab in GitHub after pushing changes.
+To view test results and coverage reports, check the "Actions" tab in GitHub after pushing changes.
 
 ## Test Coverage by Component
 

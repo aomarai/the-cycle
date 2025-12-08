@@ -1,6 +1,9 @@
 HardcoreCycle Plugin
 ====================
 
+[![Java CI with Maven](https://github.com/aomarai/the-cycle/actions/workflows/maven-test.yml/badge.svg)](https://github.com/aomarai/the-cycle/actions/workflows/maven-test.yml)
+[![codecov](https://codecov.io/gh/aomarai/the-cycle/branch/main/graph/badge.svg)](https://codecov.io/gh/aomarai/the-cycle)
+
 A small Minecraft server plugin that cycles a hardcore world by generating a fresh world, safely moving players to a small lobby while generation runs and returning players once the new world is ready.
 
 This README covers installation, configuration, running with a proxy (BungeeCord/Velocity), and the plugin's behaviour and trouble‑shooting tips.

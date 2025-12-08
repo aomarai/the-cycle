@@ -30,6 +30,16 @@ jobs:
     - name: Run tests
       run: mvn -B test
       
+    - name: Generate JaCoCo coverage report
+      run: mvn jacoco:report
+      
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./target/site/jacoco/jacoco.xml
+        fail_ci_if_error: false
+        verbose: true
+      
     - name: Generate test report
       if: always()
       uses: dorny/test-reporter@v1
@@ -45,4 +55,12 @@ jobs:
       with:
         name: test-results
         path: target/surefire-reports/
+        retention-days: 30
+        
+    - name: Upload coverage reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: target/site/jacoco/
         retention-days: 30
