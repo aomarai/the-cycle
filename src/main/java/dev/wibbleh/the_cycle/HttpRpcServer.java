@@ -27,6 +27,7 @@ public class HttpRpcServer {
         InetSocketAddress addr = bindAddr == null || bindAddr.isEmpty() ? new InetSocketAddress(port) : new InetSocketAddress(bindAddr, port);
         server = HttpServer.create(addr, 0);
         server.createContext("/rpc", new RpcHandler());
+        server.createContext("/health", new HealthHandler());
         server.setExecutor(Executors.newFixedThreadPool(2));
     }
 
@@ -149,6 +150,37 @@ public class HttpRpcServer {
                 exchange.sendResponseHeaders(400, -1);
             } catch (Exception e) {
                 safeLogger.warning("Failed to handle HTTP RPC: " + e.getMessage());
+                exchange.sendResponseHeaders(500, -1);
+            }
+        }
+    }
+
+    class HealthHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            try {
+                String role = plugin.getConfig().getString("server.role", "hardcore");
+                int cycle = plugin.getCycleNumber();
+                int players = Bukkit.getOnlinePlayers().size();
+
+                String response = String.format(
+                        "{\"status\":\"ok\",\"role\":\"%s\",\"cycleNumber\":%d,\"playersOnline\":%d}",
+                        role, cycle, players
+                );
+
+                byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, responseBytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(responseBytes);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to handle health check: " + e.getMessage());
                 exchange.sendResponseHeaders(500, -1);
             }
         }

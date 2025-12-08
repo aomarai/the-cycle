@@ -83,6 +83,13 @@ public class Main extends JavaPlugin implements Listener {
     private final Set<UUID> pendingHardcoreMoves = Collections.synchronizedSet(new HashSet<>());
     // File used to persist pending moves across restarts
     private File pendingMovesFile;
+    // File used to persist failed RPC messages across restarts
+    private File persistentRpcQueueFile;
+    // Persistent queue for failed RPC messages (survives restarts)
+    private final List<RpcQueueStorage.QueuedRpc> persistentRpcQueue = Collections.synchronizedList(new ArrayList<>());
+    private static final int MAX_PERSISTENT_RPC_QUEUE = 100;
+    // Task ID for periodic RPC retry task
+    private int persistentRpcRetryTaskId = -1;
 
     /**
      * Plugin enable lifecycle method. Loads configuration, wires helper services,
@@ -92,8 +99,19 @@ public class Main extends JavaPlugin implements Listener {
     public void onEnable() {
         saveDefaultConfig();
         cfg = getConfig();
+        
+        // Validate configuration early to catch issues before they cause runtime problems
+        ConfigValidator.ValidationResult validation = ConfigValidator.validate(cfg);
+        validation.logResults();
+        if (validation.hasErrors()) {
+            LOG.severe("Configuration validation failed. Please fix the errors above and restart the server.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        
         // ensure data folder and pending moves file
         pendingMovesFile = new File(getDataFolder(), "pending_moves.json");
+        persistentRpcQueueFile = new File(getDataFolder(), "failed_rpcs.json");
 
         // Read server role (default: hardcore). If role is "lobby" the plugin will not create or delete worlds.
         String role = cfg.getString("server.role", "hardcore").trim().toLowerCase(Locale.ROOT);
@@ -181,6 +199,9 @@ public class Main extends JavaPlugin implements Listener {
 
         // Load persisted pending moves (if any)
         loadPendingMoves();
+        
+        // Load persisted RPC queue (if any)
+        loadPersistentRpcQueue();
 
         // Schedule a periodic task to try to drain the outbound RPC queue (runs on main thread)
         if (rpcQueueTaskId == -1) {
@@ -213,6 +234,7 @@ public class Main extends JavaPlugin implements Listener {
     public void onDisable() {
         writeCycleFile(cycleNumber.get());
         savePendingMoves();
+        savePersistentRpcQueue();
     }
 
     /**
@@ -632,30 +654,28 @@ public class Main extends JavaPlugin implements Listener {
          // should be a full URL like http://hardcore-host:8080/rpc
          String hardcoreHttpUrl = cfg.getString("server.hardcore_http_url", "").trim();
          if (!hardcoreHttpUrl.isEmpty()) {
+             String caller = requester instanceof org.bukkit.entity.Player ? ((org.bukkit.entity.Player) requester).getUniqueId().toString() : "console";
+             String payload = "{\"action\":\"" + action + "\",\"caller\":\"" + caller + "\"}";
+             
              try {
-                 String caller = requester instanceof org.bukkit.entity.Player ? ((org.bukkit.entity.Player) requester).getUniqueId().toString() : "console";
-                 String payload = "{\"action\":\"" + action + "\",\"caller\":\"" + caller + "\"}";
                  String sig = RpcHttpUtil.computeHmacHex(rpcSecret, payload);
-                 java.net.URL u = new java.net.URL(hardcoreHttpUrl);
-                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-                 conn.setRequestMethod("POST");
-                 conn.setDoOutput(true);
-                 conn.setRequestProperty("Content-Type", "application/json");
-                 conn.setRequestProperty("X-Signature", sig);
-                 conn.setConnectTimeout(3000);
-                 conn.setReadTimeout(5000);
-                 try (OutputStream os = conn.getOutputStream()) {
-                     os.write(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                 }
-                 int code = conn.getResponseCode();
-                 if (code >= 200 && code < 300) {
-                     LOG.info("Forwarded RPC via HTTP to " + hardcoreHttpUrl + " status=" + code);
+                 
+                 // Use HttpRetryUtil for resilient HTTP POST with automatic retry and exponential backoff
+                 HttpRetryUtil.RetryConfig retryConfig = HttpRetryUtil.RetryConfig.defaults();
+                 HttpRetryUtil.HttpResult result = HttpRetryUtil.postWithRetry(hardcoreHttpUrl, payload, sig, retryConfig);
+                 
+                 if (result.success()) {
+                     LOG.info("Forwarded RPC via HTTP to " + hardcoreHttpUrl + " status=" + result.statusCode() + " (attempts=" + result.attempts() + ")");
                      return true;
                  } else {
-                     LOG.warning("HTTP RPC forward returned non-2xx: " + code);
+                     LOG.warning("HTTP RPC forward failed after " + result.attempts() + " attempts: " + result.errorMessage());
+                     // Save to persistent queue for retry on next startup or periodic retry
+                     enqueuePersistentRpc(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8), action, caller);
                  }
              } catch (Exception e) {
-                 LOG.warning("HTTP RPC forward failed: " + e.getMessage());
+                 LOG.warning("HTTP RPC forward setup failed: " + e.getMessage());
+                 // Save to persistent queue for retry
+                 enqueuePersistentRpc(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8), action, caller);
              }
          }
 
@@ -828,6 +848,125 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     /**
+     * Enqueue a failed RPC to the persistent queue for retry on next startup.
+     * This ensures RPC messages are not lost during server restarts.
+     */
+    private synchronized void enqueuePersistentRpc(byte[] payload, String action, String caller) {
+        if (payload == null || payload.length == 0) return;
+        if (persistentRpcQueue.size() >= MAX_PERSISTENT_RPC_QUEUE) {
+            persistentRpcQueue.remove(0);
+            LOG.warning("Persistent RPC queue full; dropping oldest message.");
+        }
+        long timestamp = java.time.Instant.now().getEpochSecond();
+        RpcQueueStorage.QueuedRpc rpc = new RpcQueueStorage.QueuedRpc(payload, action, caller, timestamp, 0);
+        persistentRpcQueue.add(rpc);
+        LOG.info("Enqueued persistent RPC; queue size=" + persistentRpcQueue.size());
+        // Save immediately to ensure it survives unexpected shutdown
+        savePersistentRpcQueue();
+    }
+
+    /**
+     * Load persistent RPC queue from disk on startup.
+     */
+    private void loadPersistentRpcQueue() {
+        if (persistentRpcQueueFile == null || !persistentRpcQueueFile.exists()) {
+            LOG.info("No persistent RPC queue file found; starting with empty queue.");
+            return;
+        }
+        List<RpcQueueStorage.QueuedRpc> loaded = RpcQueueStorage.load(persistentRpcQueueFile);
+        persistentRpcQueue.addAll(loaded);
+        LOG.info("Loaded " + loaded.size() + " persistent RPCs from disk.");
+        
+        // Start periodic retry task if we have queued messages
+        if (!persistentRpcQueue.isEmpty()) {
+            schedulePeriodicRpcRetry();
+        }
+    }
+
+    /**
+     * Save persistent RPC queue to disk.
+     */
+    private void savePersistentRpcQueue() {
+        if (persistentRpcQueueFile == null) return;
+        RpcQueueStorage.save(persistentRpcQueueFile, new ArrayList<>(persistentRpcQueue));
+    }
+
+    /**
+     * Schedule periodic retry of persistent RPC queue.
+     * Runs every 60 seconds to attempt delivery of failed RPCs.
+     */
+    private void schedulePeriodicRpcRetry() {
+        // Cancel existing task if any
+        if (persistentRpcRetryTaskId != -1) {
+            Bukkit.getScheduler().cancelTask(persistentRpcRetryTaskId);
+            LOG.info("Cancelled existing RPC retry task.");
+        }
+        
+        // Schedule task to run every 60 seconds (1200 ticks)
+        persistentRpcRetryTaskId = Bukkit.getScheduler().runTaskTimer(this, this::retryPersistentRpcQueue, 20L * 60, 20L * 60).getTaskId();
+        LOG.info("Scheduled periodic RPC retry task (every 60 seconds).");
+    }
+
+    /**
+     * Attempt to retry RPCs from the persistent queue.
+     */
+    private synchronized void retryPersistentRpcQueue() {
+        if (persistentRpcQueue.isEmpty()) return;
+        
+        String hardcoreHttpUrl = cfg.getString("server.hardcore_http_url", "").trim();
+        if (hardcoreHttpUrl.isEmpty()) {
+            LOG.fine("No hardcore HTTP URL configured; skipping persistent RPC retry.");
+            return;
+        }
+
+        LOG.info("Retrying " + persistentRpcQueue.size() + " persistent RPCs...");
+        List<RpcQueueStorage.QueuedRpc> toRemove = new ArrayList<>();
+        List<RpcQueueStorage.QueuedRpc> toUpdate = new ArrayList<>();
+        
+        for (int i = 0; i < persistentRpcQueue.size(); i++) {
+            RpcQueueStorage.QueuedRpc rpc = persistentRpcQueue.get(i);
+            if (rpc.isExpired()) {
+                toRemove.add(rpc);
+                LOG.info("Removing expired RPC: action=" + rpc.action());
+                continue;
+            }
+
+            try {
+                String payload = new String(rpc.payload(), java.nio.charset.StandardCharsets.UTF_8);
+                String sig = RpcHttpUtil.computeHmacHex(rpcSecret, payload);
+                
+                HttpRetryUtil.RetryConfig retryConfig = HttpRetryUtil.RetryConfig.noRetry();
+                HttpRetryUtil.HttpResult result = HttpRetryUtil.postWithRetry(hardcoreHttpUrl, payload, sig, retryConfig);
+                
+                if (result.success()) {
+                    LOG.info("Persistent RPC retry succeeded: action=" + rpc.action());
+                    toRemove.add(rpc);
+                } else {
+                    LOG.fine("Persistent RPC retry failed: action=" + rpc.action() + " - will retry later");
+                    // Mark for attempt count update
+                    toUpdate.add(rpc);
+                }
+            } catch (Exception e) {
+                LOG.warning("Error retrying persistent RPC: " + e.getMessage());
+            }
+        }
+
+        // Apply updates in a single pass
+        for (RpcQueueStorage.QueuedRpc rpc : toUpdate) {
+            int index = persistentRpcQueue.indexOf(rpc);
+            if (index >= 0) {
+                persistentRpcQueue.set(index, rpc.withIncrementedAttempts());
+            }
+        }
+
+        persistentRpcQueue.removeAll(toRemove);
+        if (!toRemove.isEmpty() || !toUpdate.isEmpty()) {
+            savePersistentRpcQueue();
+            LOG.info("Removed " + toRemove.size() + " RPCs from persistent queue; " + persistentRpcQueue.size() + " remaining.");
+        }
+    }
+
+    /**
      * Notify configured lobby HTTP endpoint that a world is ready. Fire-and-forget.
      */
     private void notifyLobbyWorldReady(int cycle) {
@@ -837,38 +976,33 @@ public class Main extends JavaPlugin implements Listener {
             LOG.info("No lobby_http_url configured; skipping world-ready notification.");
             return;
         }
+        
+        String payload = "{\"action\":\"world-ready\",\"cycle\":" + cycle + "}";
+        // Avoid notifying ourself: if lobbyUrl points to our own embedded HTTP listener, skip the POST.
         try {
-            String payload = "{\"action\":\"world-ready\",\"cycle\":" + cycle + "}";
-            // Avoid notifying ourself: if lobbyUrl points to our own embedded HTTP listener, skip the POST.
-            try {
-                java.net.URL parsed = new java.net.URL(lobbyUrl);
-                String host = parsed.getHost();
-                int port = parsed.getPort() == -1 ? parsed.getDefaultPort() : parsed.getPort();
-                boolean isLoopback = "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || host.equals(java.net.InetAddress.getLocalHost().getHostAddress());
-                if (isLoopback && httpRpcServer != null && port == configuredHttpPort) {
-                    LOG.info("Lobby URL points to this server's own HTTP listener; skipping HTTP notify to avoid self-delivery: " + lobbyUrl);
-                    return;
-                }
-            } catch (Exception e) {
-                // ignore URL parse errors and continue attempting to notify
+            java.net.URL parsed = new java.net.URL(lobbyUrl);
+            String host = parsed.getHost();
+            int port = parsed.getPort() == -1 ? parsed.getDefaultPort() : parsed.getPort();
+            boolean isLoopback = "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || host.equals(java.net.InetAddress.getLocalHost().getHostAddress());
+            if (isLoopback && httpRpcServer != null && port == configuredHttpPort) {
+                LOG.info("Lobby URL points to this server's own HTTP listener; skipping HTTP notify to avoid self-delivery: " + lobbyUrl);
+                return;
             }
+        } catch (Exception e) {
+            // ignore URL parse errors and continue attempting to notify
+        }
 
+        try {
             String sig = RpcHttpUtil.computeHmacHex(rpcSecret, payload);
-            try {
-                java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder().build();
-                java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
-                        .uri(java.net.URI.create(lobbyUrl))
-                        .timeout(java.time.Duration.ofSeconds(60))
-                        .header("Content-Type", "application/json")
-                        .header("X-Signature", sig)
-                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload, java.nio.charset.StandardCharsets.UTF_8))
-                        .build();
-                java.net.http.HttpResponse<Void> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.discarding());
-                int code = resp.statusCode();
-                if (code >= 200 && code < 300) LOG.info("Notified lobby of world-ready: " + lobbyUrl + " status=" + code);
-                else LOG.warning("Lobby notification returned non-2xx: " + code);
-            } catch (Exception e) {
-                LOG.warning("Failed to notify lobby of world-ready: " + e.getMessage());
+            
+            // Use HttpRetryUtil for resilient HTTP POST with retry
+            HttpRetryUtil.RetryConfig retryConfig = HttpRetryUtil.RetryConfig.defaults();
+            HttpRetryUtil.HttpResult result = HttpRetryUtil.postWithRetry(lobbyUrl, payload, sig, retryConfig);
+            
+            if (result.success()) {
+                LOG.info("Notified lobby of world-ready: " + lobbyUrl + " status=" + result.statusCode() + " (attempts=" + result.attempts() + ")");
+            } else {
+                LOG.warning("Failed to notify lobby of world-ready after " + result.attempts() + " attempts: " + result.errorMessage());
             }
         } catch (Exception e) {
             LOG.warning("Failed to notify lobby of world-ready: " + e.getMessage());
