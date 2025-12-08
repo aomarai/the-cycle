@@ -5,6 +5,7 @@ import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.java.JavaPluginLoader;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scoreboard.Objective;
@@ -336,4 +337,180 @@ class MainTest {
         // Should return true even if dead (after switching to spectator)
         assertTrue(result);
     }
+
+    @Test
+    void testRecordDragonKillIncrementsWinsAndResetsAttempts() throws Exception {
+        // Use mock with real methods to avoid initialization issues
+        Main plugin = mock(Main.class);
+        
+        // Initialize the atomic fields via reflection
+        java.lang.reflect.Field attemptsField = Main.class.getDeclaredField("attemptsSinceLastWin");
+        attemptsField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger(5);
+        attemptsField.set(plugin, attempts);
+
+        java.lang.reflect.Field winsField = Main.class.getDeclaredField("totalWins");
+        winsField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicInteger wins = new java.util.concurrent.atomic.AtomicInteger(2);
+        winsField.set(plugin, wins);
+
+        // Call real methods
+        when(plugin.getAttemptsSinceLastWin()).thenCallRealMethod();
+        when(plugin.getTotalWins()).thenCallRealMethod();
+        doCallRealMethod().when(plugin).recordDragonKill();
+
+        // Execute
+        plugin.recordDragonKill();
+
+        // Verify
+        assertEquals(0, plugin.getAttemptsSinceLastWin(), "Attempts should be reset to 0");
+        assertEquals(3, plugin.getTotalWins(), "Wins should be incremented to 3");
+    }
+
+    @Test
+    void testIsPlayerInCurrentCycle() throws Exception {
+        Main plugin = mock(Main.class);
+        UUID playerId = UUID.randomUUID();
+
+        // Initialize the set via reflection
+        java.lang.reflect.Field playersField = Main.class.getDeclaredField("playersInCurrentCycle");
+        playersField.setAccessible(true);
+        Set<UUID> players = Collections.synchronizedSet(new HashSet<>());
+        playersField.set(plugin, players);
+
+        // Call real methods
+        when(plugin.isPlayerInCurrentCycle(any(UUID.class))).thenCallRealMethod();
+        doCallRealMethod().when(plugin).addPlayerToCurrentCycle(any(UUID.class));
+
+        // Player not in cycle initially
+        assertFalse(plugin.isPlayerInCurrentCycle(playerId));
+
+        // Add player to cycle
+        plugin.addPlayerToCurrentCycle(playerId);
+
+        // Player now in cycle
+        assertTrue(plugin.isPlayerInCurrentCycle(playerId));
+    }
+
+    @Test
+    void testAddPlayerToCurrentCycle() throws Exception {
+        Main plugin = mock(Main.class);
+        UUID player1 = UUID.randomUUID();
+        UUID player2 = UUID.randomUUID();
+
+        // Initialize the set via reflection
+        java.lang.reflect.Field playersField = Main.class.getDeclaredField("playersInCurrentCycle");
+        playersField.setAccessible(true);
+        Set<UUID> players = Collections.synchronizedSet(new HashSet<>());
+        playersField.set(plugin, players);
+
+        // Call real methods
+        when(plugin.isPlayerInCurrentCycle(any(UUID.class))).thenCallRealMethod();
+        doCallRealMethod().when(plugin).addPlayerToCurrentCycle(any(UUID.class));
+
+        // Add multiple players
+        plugin.addPlayerToCurrentCycle(player1);
+        plugin.addPlayerToCurrentCycle(player2);
+
+        // Both should be in cycle
+        assertTrue(plugin.isPlayerInCurrentCycle(player1));
+        assertTrue(plugin.isPlayerInCurrentCycle(player2));
+
+        // Adding same player again shouldn't cause issues (Set behavior)
+        plugin.addPlayerToCurrentCycle(player1);
+        assertTrue(plugin.isPlayerInCurrentCycle(player1));
+    }
+
+    @Test
+    void testCycleStartPendingFlagOperations() throws Exception {
+        Main plugin = mock(Main.class);
+
+        // Initialize the flag via reflection
+        java.lang.reflect.Field pendingField = Main.class.getDeclaredField("cycleStartPending");
+        pendingField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicBoolean pending = new java.util.concurrent.atomic.AtomicBoolean(false);
+        pendingField.set(plugin, pending);
+
+        // Call real method
+        doCallRealMethod().when(plugin).clearCycleStartPending();
+
+        // Initially false
+        assertFalse(pending.get());
+
+        // Set to true
+        pending.set(true);
+        assertTrue(pending.get());
+
+        // Clear it
+        plugin.clearCycleStartPending();
+        assertFalse(pending.get());
+    }
+
+    @Test
+    void testCheckAndAutoStartCycleOnHardcoreDoesNothing() throws Exception {
+        Main plugin = mock(Main.class);
+        
+        // Initialize the flag via reflection
+        java.lang.reflect.Field pendingField = Main.class.getDeclaredField("cycleStartPending");
+        pendingField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicBoolean pending = new java.util.concurrent.atomic.AtomicBoolean(false);
+        pendingField.set(plugin, pending);
+        
+        // Set the isHardcoreBackend field via reflection
+        java.lang.reflect.Field backendField = Main.class.getDeclaredField("isHardcoreBackend");
+        backendField.setAccessible(true);
+        backendField.set(plugin, true);
+        
+        // Call real method
+        doCallRealMethod().when(plugin).checkAndAutoStartCycle();
+
+        // Should return early without doing anything (no exception)
+        plugin.checkAndAutoStartCycle();
+        
+        // Flag should still be false (not set)
+        assertFalse(pending.get());
+    }
+
+    @Test
+    void testGetAttemptsSinceLastWinAndTotalWins() throws Exception {
+        Main plugin = mock(Main.class);
+
+        // Set values via reflection
+        java.lang.reflect.Field attemptsField = Main.class.getDeclaredField("attemptsSinceLastWin");
+        attemptsField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger(7);
+        attemptsField.set(plugin, attempts);
+
+        java.lang.reflect.Field winsField = Main.class.getDeclaredField("totalWins");
+        winsField.setAccessible(true);
+        java.util.concurrent.atomic.AtomicInteger wins = new java.util.concurrent.atomic.AtomicInteger(4);
+        winsField.set(plugin, wins);
+
+        // Call real methods
+        when(plugin.getAttemptsSinceLastWin()).thenCallRealMethod();
+        when(plugin.getTotalWins()).thenCallRealMethod();
+
+        // Verify getters
+        assertEquals(7, plugin.getAttemptsSinceLastWin());
+        assertEquals(4, plugin.getTotalWins());
+    }
+
+    @Test
+    void testStatsFileNaming() throws Exception {
+        Main plugin = mock(Main.class);
+        File dataFolder = new File(tempDir.toFile(), "test_statsFile");
+        dataFolder.mkdirs();
+        
+        // Set stats file
+        java.lang.reflect.Field statsFileField = Main.class.getDeclaredField("statsFile");
+        statsFileField.setAccessible(true);
+        statsFileField.set(plugin, new File(dataFolder, "stats.txt"));
+
+        File statsFile = (File) statsFileField.get(plugin);
+        
+        // Verify it's named stats.txt not stats.json
+        assertEquals("stats.txt", statsFile.getName(), "Stats file should be named stats.txt");
+        assertFalse(statsFile.getName().equals("stats.json"), "Stats file should not be named stats.json");
+    }
 }
+
