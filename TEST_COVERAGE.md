@@ -2,31 +2,86 @@
 
 This document provides an overview of the comprehensive unit test suite for the-cycle Minecraft plugin.
 
-## Test Statistics
+## Test Statistics (Updated after master merge)
 
-- **Total Tests**: 42
-- **Test Classes**: 5
+- **Total Tests**: 121 (up from 50 initially, includes 4 new health endpoint tests)
+- **Test Classes**: 15
 - **All Tests Passing**: ✅ Yes
 - **Test Framework**: JUnit 5 with Mockito
 - **Java Version**: 21
 - **CI/CD**: ✅ GitHub Actions configured
+- **Code Coverage**: ~38% line coverage (519/1352 lines)
+
+## Test Coverage by Component
+
+### Original Additions (This PR)
+
+**HttpRpcServer** (13 tests total - 9 original + 4 new)
+- HTTP POST method validation
+- Signature verification (HMAC-SHA256)
+- Valid signature acceptance
+- Action routing (cycle-now, world-ready, move-players)
+- Unknown action handling
+- Server start/stop lifecycle
+- Null/empty bind address handling
+- **NEW**: Health endpoint GET validation
+- **NEW**: Health endpoint JSON response validation
+- **NEW**: Health endpoint with lobby/hardcore roles
+- **NEW**: Health endpoint error handling
+
+**PendingMovesStorage** (14 tests total)
+- Original test + 13 additional edge case tests
+- Null file handling
+- Non-existent file loading
+- Null/empty sets handling
+- Invalid JSON parsing
+- Malformed UUID handling
+- Mixed valid/invalid UUIDs
+- Parent directory creation
+- Multiple UUIDs save/load
+- Set clearing behavior
+
+### Tests from Master Branch Merge
+
+**ConfigValidator** (13 tests)
+- Configuration validation logic
+- Required field checking
+- URL validation
+- Port range validation
+- Error and warning handling
+
+**HttpRetryUtil** (tests)
+- HTTP retry logic with exponential backoff
+- Connection timeout handling
+- Retry limit enforcement
+
+**RpcQueueStorage** (10 tests)
+- Persistent RPC queue save/load
+- Expiration handling
+- Empty file handling
+- Multiple RPCs handling
+
+**PersistentRpcQueue** (tests)
+- Queue operations
+- Retry logic
+- Persistence across restarts
 
 ## Continuous Integration
 
 The project uses GitHub Actions to automatically run tests on every push and pull request. The CI pipeline:
 
 - ✅ Builds the project with Maven
-- ✅ Runs all 42 unit tests
+- ✅ Runs all 121 unit tests
+- ✅ Generates JaCoCo code coverage reports
+- ✅ Uploads coverage to Codecov
 - ✅ Generates test reports
-- ✅ Uploads test results as artifacts
+- ✅ Uploads test results and coverage as artifacts
 - ✅ Fails the build if any tests fail
-- ✅ Has proper permissions for test reporting on pull requests
 
 **Workflow file**: `.github/workflows/maven-test.yml`
 
-To view test results, check the "Actions" tab in GitHub after pushing changes.
+To view test results and coverage reports, check the "Actions" tab in GitHub after pushing changes.
 
-## Test Coverage by Component
 
 ### 1. CommandHandler (10 tests)
 
