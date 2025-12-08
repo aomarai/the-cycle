@@ -88,6 +88,40 @@ HTTP RPC notes
 - Use HTTP forwarding when you don't want to rely on a player to send plugin messages or when servers are on separate hosts.
 - If the lobby and hardcore run on the same host and use the embedded HTTP listener, the plugin avoids sending notifications to itself.
 
+Health Check Endpoint
+---------------------
+When HTTP RPC is enabled (`server.http_enabled: true`), the plugin provides a health check endpoint:
+
+**GET /health**
+
+Returns JSON status information:
+```json
+{
+  "status": "ok",
+  "role": "hardcore",
+  "cycleNumber": 42,
+  "playersOnline": 6
+}
+```
+
+Use this endpoint to:
+- Monitor server health from external tools
+- Verify RPC connectivity before attempting operations
+- Check cycle status without in-game commands
+- Build simple dashboards or status pages
+
+Stability & Reliability Features
+--------------------------------
+The plugin includes several features to ensure reliable operation:
+
+1. **Automatic HTTP Retry**: HTTP RPC calls use exponential backoff with jitter for automatic retry on transient failures (up to 3 attempts by default).
+
+2. **Configuration Validation**: On startup, the plugin validates your configuration and reports errors/warnings. Invalid configurations prevent the plugin from starting, catching issues early.
+
+3. **Persistent RPC Queue** (planned): Failed RPC messages are persisted to disk and retried on server restart, ensuring no messages are lost during server maintenance.
+
+4. **Health Monitoring**: The `/health` endpoint enables external monitoring and alerting systems to track server status.
+
 Server-resource suggestions
 ---------------------------
 These are guideline estimates for small groups (6-8 players):
@@ -143,9 +177,17 @@ Troubleshooting
   - Check server logs for warnings about plugin channels not being registered. The plugin will fall back to HTTP RPC when configured.
 - Lobby forwards but hardcore doesn't react:
   - Verify that the hardcore has either the HTTP RPC endpoint enabled and reachable, or that plugin messaging forwarding reaches the hardcore via the proxy (Bungee).
+  - Test the health endpoint: `curl http://hardcore-server:8080/health` should return a JSON status if HTTP RPC is working.
 - New world fails to generate / times out:
   - Large world generation may stall due to heavy chunk processing; ensure the server has enough CPU and memory.
   - The plugin waits for players to leave before generation up to `behavior.wait_for_players_to_leave_seconds`; if players remain the plugin will proceed after the timeout.
+- Configuration errors on startup:
+  - The plugin validates configuration on startup and will log detailed warnings/errors. Fix any reported issues and restart.
+  - Common issues: invalid URLs (must start with http:// or https://), missing required fields for lobby servers, invalid port numbers.
+- HTTP RPC failures:
+  - Check logs for retry attempts and error messages. The plugin automatically retries HTTP calls up to 3 times with exponential backoff.
+  - Verify firewall rules allow traffic on the configured HTTP port.
+  - Use the health endpoint to verify connectivity: `curl http://server:8080/health`
 
 Developer notes
 ---------------
