@@ -266,32 +266,31 @@ public class Main extends JavaPlugin implements Listener {
 
         deathRecap.clear();
 
-        // Schedule generation after ensuring previous-world players have left (or timeout).
+        // Schedule generation after ensuring all players have been moved to lobby.
         final int cycleNum = next;
         final String prevWorldName = "hardcore_cycle_" + (next - 1);
-        // Move players out of previous world if present
-        if (next > 1 && cfg.getBoolean("behavior.delete_previous_worlds", true)) {
-            World prevWorld = Bukkit.getWorld(prevWorldName);
-            if (prevWorld != null) {
-                if (preGenerationCountdownEnabled) {
-                    LOG.info("Scheduling countdown to move players out of previous world '" + prevWorldName + "' to lobby before generating new world.");
-                    // Schedule countdown to move players so clients have time to transition. This will mark dead players as pending.
-                    scheduleCountdownThenSendPlayersToLobby(prevWorld.getPlayers(), countdownSendToLobbySeconds);
-                } else {
-                    LOG.info("Moving players out of previous world '" + prevWorldName + "' to lobby immediately (pre-generation countdown disabled).");
-                    for (Player p : prevWorld.getPlayers()) {
-                        try { sendPlayerToLobby(p); } catch (Exception ex) { LOG.warning("Failed to move player " + p.getName() + " to lobby before generation: " + ex.getMessage()); }
-                        aliveMap.put(p.getUniqueId(), true);
-                    }
-                }
+        // Move ALL online players to lobby before starting world generation (prevents timeouts during generation)
+        Collection<? extends Player> playersToMove = Bukkit.getOnlinePlayers();
+        if (!playersToMove.isEmpty()) {
+            if (preGenerationCountdownEnabled) {
+                LOG.info("Scheduling countdown to move all online players to lobby before generating new world (cycle #" + next + ").");
+                // Schedule countdown to move players so clients have time to transition. This will mark dead players as pending.
+                scheduleCountdownThenSendPlayersToLobby(playersToMove, countdownSendToLobbySeconds);
             } else {
-                LOG.fine("Previous world '" + prevWorldName + "' not loaded; nothing to move.");
+                LOG.info("Moving all online players to lobby immediately before generating new world (pre-generation countdown disabled).");
+                for (Player p : playersToMove) {
+                    try { sendPlayerToLobby(p); } catch (Exception ex) { LOG.warning("Failed to move player " + p.getName() + " to lobby before generation: " + ex.getMessage()); }
+                    aliveMap.put(p.getUniqueId(), true);
+                }
             }
+        } else {
+            LOG.info("No online players to move to lobby; proceeding with world generation.");
         }
 
-        // Start a short delay before attempting generation, then poll for remaining players leaving the previous world
+        // Start a short delay before attempting generation, then poll for remaining players leaving worlds
         Bukkit.getScheduler().runTaskLater(this, () -> {
             // If we should wait for players to leave, poll once per second up to the configured timeout
+            // Wait if previous world exists and deletion is enabled
             if (waitForPlayersToLeaveSeconds > 0 && next > 1 && cfg.getBoolean("behavior.delete_previous_worlds", true)) {
                 final int[] elapsed = {0};
                 final org.bukkit.scheduler.BukkitTask[] taskHolder = new org.bukkit.scheduler.BukkitTask[1];
