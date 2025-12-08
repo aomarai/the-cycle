@@ -1,14 +1,16 @@
 package dev.wibbleh.the_cycle;
 
-import org.json.simple.JSONArray;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.lang.reflect.Type;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -19,6 +21,7 @@ import java.util.logging.Logger;
 public final class RpcQueueStorage {
     private static final Logger LOG = Logger.getLogger("HardcoreCycle");
     private static final long MAX_AGE_SECONDS = 86400; // 24 hours
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private RpcQueueStorage() {
         // Utility class
@@ -54,17 +57,37 @@ public final class RpcQueueStorage {
     }
 
     /**
+     * DTO for JSON serialization (payload is base64-encoded).
+     */
+    private record QueuedRpcDto(
+            String payload,
+            String action,
+            String caller,
+            long timestamp,
+            int attempts
+    ) {
+        static QueuedRpcDto fromQueuedRpc(QueuedRpc rpc) {
+            String payloadBase64 = Base64.getEncoder().encodeToString(rpc.payload);
+            return new QueuedRpcDto(payloadBase64, rpc.action, rpc.caller, rpc.timestamp, rpc.attempts);
+        }
+
+        QueuedRpc toQueuedRpc() {
+            byte[] payload = Base64.getDecoder().decode(this.payload);
+            return new QueuedRpc(payload, action, caller, timestamp, attempts);
+        }
+    }
+
+    /**
      * Save queued RPC messages to a JSON file.
      * Each RPC is stored with its payload (base64-encoded), action, caller, timestamp, and attempt count.
      *
      * @param file   target file to write to
      * @param rpcs   list of queued RPCs to persist
      */
-    @SuppressWarnings("unchecked")
     public static void save(File file, List<QueuedRpc> rpcs) {
         if (file == null || rpcs == null) return;
 
-        JSONArray array = new JSONArray();
+        List<QueuedRpcDto> dtos = new ArrayList<>();
         long now = Instant.now().getEpochSecond();
         
         for (QueuedRpc rpc : rpcs) {
@@ -76,19 +99,12 @@ public final class RpcQueueStorage {
                 continue;
             }
 
-            JSONObject obj = new JSONObject();
-            // Encode payload as base64 for safe JSON storage
-            obj.put("payload", java.util.Base64.getEncoder().encodeToString(rpc.payload));
-            obj.put("action", rpc.action);
-            obj.put("caller", rpc.caller);
-            obj.put("timestamp", rpc.timestamp);
-            obj.put("attempts", rpc.attempts);
-            array.add(obj);
+            dtos.add(QueuedRpcDto.fromQueuedRpc(rpc));
         }
 
         try (FileWriter writer = new FileWriter(file)) {
-            writer.write(array.toJSONString());
-            LOG.fine("Persisted " + array.size() + " queued RPCs to " + file.getName());
+            GSON.toJson(dtos, writer);
+            LOG.fine("Persisted " + dtos.size() + " queued RPCs to " + file.getName());
         } catch (Exception e) {
             LOG.warning("Failed to save RPC queue: " + e.getMessage());
         }
@@ -105,41 +121,22 @@ public final class RpcQueueStorage {
         if (file == null || !file.exists()) return result;
 
         try (FileReader reader = new FileReader(file)) {
-            JSONParser parser = new JSONParser();
-            Object parsed = parser.parse(reader);
-            if (!(parsed instanceof JSONArray)) {
-                LOG.warning("RPC queue file does not contain a JSON array; ignoring.");
+            Type listType = new TypeToken<List<QueuedRpcDto>>(){}.getType();
+            List<QueuedRpcDto> dtos = GSON.fromJson(reader, listType);
+            
+            if (dtos == null) {
+                LOG.warning("RPC queue file is empty or invalid; ignoring.");
                 return result;
             }
 
-            JSONArray array = (JSONArray) parsed;
-            for (Object item : array) {
-                if (!(item instanceof JSONObject)) continue;
-                JSONObject obj = (JSONObject) item;
-
+            for (QueuedRpcDto dto : dtos) {
                 try {
-                    String payloadBase64 = (String) obj.get("payload");
-                    String action = (String) obj.get("action");
-                    String caller = (String) obj.get("caller");
-                    long timestamp = obj.get("timestamp") instanceof Long
-                            ? (Long) obj.get("timestamp")
-                            : Long.parseLong(obj.get("timestamp").toString());
-                    int attempts = obj.get("attempts") instanceof Long
-                            ? ((Long) obj.get("attempts")).intValue()
-                            : Integer.parseInt(obj.get("attempts").toString());
-
-                    if (payloadBase64 == null || action == null) {
-                        LOG.warning("Skipping invalid RPC entry in queue file (missing fields).");
-                        continue;
-                    }
-
-                    byte[] payload = java.util.Base64.getDecoder().decode(payloadBase64);
-                    QueuedRpc rpc = new QueuedRpc(payload, action, caller, timestamp, attempts);
+                    QueuedRpc rpc = dto.toQueuedRpc();
 
                     // Filter out expired RPCs on load
                     if (rpc.isExpired()) {
-                        LOG.info("Discarding expired RPC from queue: action=" + action +
-                                " age=" + (Instant.now().getEpochSecond() - timestamp) + "s");
+                        LOG.info("Discarding expired RPC from queue: action=" + rpc.action +
+                                " age=" + (Instant.now().getEpochSecond() - rpc.timestamp) + "s");
                         continue;
                     }
 

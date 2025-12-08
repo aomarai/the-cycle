@@ -4,7 +4,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.logging.Logger;
 
 /**
@@ -16,7 +16,6 @@ public final class HttpRetryUtil {
     private static final int DEFAULT_MAX_RETRIES = 3;
     private static final int DEFAULT_BASE_DELAY_MS = 100;
     private static final int DEFAULT_MAX_DELAY_MS = 5000;
-    private static final Random RANDOM = new Random();
 
     private HttpRetryUtil() {
         // Utility class
@@ -97,10 +96,11 @@ public final class HttpRetryUtil {
 
         for (int i = 0; i <= config.maxRetries; i++) {
             attempts++;
+            HttpURLConnection conn = null;
 
             try {
                 URL u = new URL(url);
-                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn = (HttpURLConnection) u.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
                 conn.setRequestProperty("Content-Type", "application/json");
@@ -132,6 +132,10 @@ public final class HttpRetryUtil {
             } catch (Exception e) {
                 lastException = e;
                 LOG.warning("HTTP POST to " + url + " failed (attempt " + attempts + "/" + (config.maxRetries + 1) + "): " + e.getMessage());
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
             }
 
             // Don't sleep after the last attempt
@@ -168,8 +172,8 @@ public final class HttpRetryUtil {
         int exponentialDelay = (int) (baseDelayMs * Math.pow(2, attemptNumber));
         // Cap at max delay
         int cappedDelay = Math.min(exponentialDelay, maxDelayMs);
-        // Add jitter (up to 25% of the delay)
-        int jitter = RANDOM.nextInt(cappedDelay / 4 + 1);
+        // Add jitter (up to 25% of the delay) using ThreadLocalRandom for thread safety
+        int jitter = ThreadLocalRandom.current().nextInt(cappedDelay / 4 + 1);
         return cappedDelay + jitter;
     }
 }
