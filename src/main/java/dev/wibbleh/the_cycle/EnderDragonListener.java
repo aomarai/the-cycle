@@ -33,7 +33,10 @@ public class EnderDragonListener implements Listener {
 
         plugin.getLogger().info("Ender Dragon killed! Recording win and resetting attempt counter.");
 
-        // Record the win
+        // Get attempt count before resetting it
+        int attemptsThisWin = plugin.getAttemptsSinceLastWin();
+        
+        // Record the win (this will reset attempts to 0)
         plugin.recordDragonKill();
 
         // Show large title screen to all players
@@ -59,7 +62,7 @@ public class EnderDragonListener implements Listener {
             p.sendMessage(Component.text("=".repeat(50), NamedTextColor.GOLD));
             p.sendMessage(Component.text("VICTORY! The Ender Dragon has been defeated!", NamedTextColor.GOLD));
             p.sendMessage(Component.text("Killer: " + killerName, NamedTextColor.YELLOW));
-            p.sendMessage(Component.text("Attempts this win: " + plugin.getAttemptsSinceLastWin(), NamedTextColor.GREEN));
+            p.sendMessage(Component.text("Attempts this win: " + attemptsThisWin, NamedTextColor.GREEN));
             p.sendMessage(Component.text("Total wins: " + plugin.getTotalWins(), NamedTextColor.GREEN));
             p.sendMessage(Component.text("=".repeat(50), NamedTextColor.GOLD));
         }

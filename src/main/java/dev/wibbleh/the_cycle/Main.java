@@ -29,6 +29,8 @@ public class Main extends JavaPlugin implements Listener {
     private final AtomicInteger attemptsSinceLastWin = new AtomicInteger(0);
     // Total wins counter: number of times the ender dragon has been killed
     private final AtomicInteger totalWins = new AtomicInteger(0);
+    // Track if a cycle start request is pending (to avoid duplicate auto-starts)
+    private final java.util.concurrent.atomic.AtomicBoolean cycleStartPending = new java.util.concurrent.atomic.AtomicBoolean(false);
     // Death recap data collected per-cycle
     private final List<Map<String, Object>> deathRecap = new ArrayList<>();
     // Track alive players by UUID
@@ -86,8 +88,6 @@ public class Main extends JavaPlugin implements Listener {
     private boolean countdownBroadcastToAll = true;
     // Optional UUID of the player who requested the last cycle; used to scope countdown messages when configured
     private volatile UUID lastCycleRequester = null;
-    // Track if a cycle start request is pending (to avoid duplicate auto-starts)
-    private volatile boolean cycleStartPending = false;
     // Pending moves for players who are dead at move time; they will be moved on respawn
     private final Set<UUID> pendingLobbyMoves = Collections.synchronizedSet(new HashSet<>());
     private final Set<UUID> pendingHardcoreMoves = Collections.synchronizedSet(new HashSet<>());
@@ -1313,8 +1313,8 @@ public class Main extends JavaPlugin implements Listener {
             return;
         }
 
-        // Check if auto-start is already pending
-        if (cycleStartPending) {
+        // Use atomic compareAndSet to ensure only one thread can start a cycle at a time
+        if (!cycleStartPending.compareAndSet(false, true)) {
             LOG.info("Cycle start already pending, skipping auto-start check.");
             return;
         }
@@ -1326,11 +1326,10 @@ public class Main extends JavaPlugin implements Listener {
 
         if (playersInLobby == 0) {
             LOG.info("No players in lobby, skipping auto-start.");
+            cycleStartPending.set(false);
             return;
         }
 
-        // Mark cycle start as pending
-        cycleStartPending = true;
         LOG.info("Auto-starting new cycle - " + playersInLobby + " player(s) waiting in lobby.");
 
         // Send RPC to hardcore to trigger a new cycle
@@ -1344,7 +1343,7 @@ public class Main extends JavaPlugin implements Listener {
             });
         } else {
             LOG.warning("Failed to auto-start cycle - RPC forwarding failed.");
-            cycleStartPending = false;
+            cycleStartPending.set(false);
         }
     }
 
@@ -1352,6 +1351,6 @@ public class Main extends JavaPlugin implements Listener {
      * Clear the cycle start pending flag (called when world is ready or on error).
      */
     public void clearCycleStartPending() {
-        cycleStartPending = false;
+        cycleStartPending.set(false);
     }
 }
