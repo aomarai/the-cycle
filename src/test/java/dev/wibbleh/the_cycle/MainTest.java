@@ -57,6 +57,15 @@ class MainTest {
         // Common mock setup
     }
 
+    /**
+     * Helper method to set a private field value using reflection.
+     */
+    private void setPrivateField(Object target, String fieldName, Object value) throws Exception {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
     @Test
     void testEscapeMethod() throws Exception {
         Main plugin = mock(Main.class, CALLS_REAL_METHODS);
@@ -291,14 +300,9 @@ class MainTest {
         when(mockPlayer.isDead()).thenReturn(true);
         when(mockPlayer.getName()).thenReturn("DeadPlayer");
         
-        // Initialize required private fields using reflection
-        java.lang.reflect.Field lobbyServerField = Main.class.getDeclaredField("lobbyServer");
-        lobbyServerField.setAccessible(true);
-        lobbyServerField.set(plugin, "");
-        
-        java.lang.reflect.Field lobbyWorldNameField = Main.class.getDeclaredField("lobbyWorldName");
-        lobbyWorldNameField.setAccessible(true);
-        lobbyWorldNameField.set(plugin, "");
+        // Initialize required private fields using helper method
+        setPrivateField(plugin, "lobbyServer", "");
+        setPrivateField(plugin, "lobbyWorldName", "");
         
         // Access private sendPlayerToLobby method
         Method sendPlayerToLobbyMethod = Main.class.getDeclaredMethod("sendPlayerToLobby", org.bukkit.entity.Player.class);
@@ -321,10 +325,8 @@ class MainTest {
         when(mockPlayer.isDead()).thenReturn(true);
         when(mockPlayer.getName()).thenReturn("DeadPlayer");
         
-        // Initialize required private field using reflection
-        java.lang.reflect.Field registeredBungeeChannelField = Main.class.getDeclaredField("registeredBungeeChannel");
-        registeredBungeeChannelField.setAccessible(true);
-        registeredBungeeChannelField.set(plugin, true);
+        // Initialize required private field using helper method
+        setPrivateField(plugin, "registeredBungeeChannel", true);
         
         // Invoke the method
         boolean result = plugin.sendPlayerToServer(mockPlayer, "hardcore");
