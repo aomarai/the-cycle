@@ -21,8 +21,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -291,5 +293,109 @@ class HttpRpcServerTest {
         // Should not throw exception with empty bind address
         server.start();
         server.stop(0);
+    }
+
+    @Test
+    void testHealthEndpointRejectsNonGetRequests() throws IOException {
+        int port = getNextPort();
+        HttpRpcServer server = new HttpRpcServer(mockPlugin, port, "127.0.0.1");
+        try {
+            HttpRpcServer.HealthHandler handler = server.new HealthHandler();
+
+            when(mockExchange.getRequestMethod()).thenReturn("POST");
+
+            handler.handle(mockExchange);
+
+            verify(mockExchange).sendResponseHeaders(405, -1);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testHealthEndpointReturnsValidJson() throws Exception {
+        int port = getNextPort();
+        HttpRpcServer server = new HttpRpcServer(mockPlugin, port, "127.0.0.1");
+        try {
+            HttpRpcServer.HealthHandler handler = server.new HealthHandler();
+
+            ByteArrayOutputStream responseBody = new ByteArrayOutputStream();
+            Headers responseHeaders = new Headers();
+
+            when(mockExchange.getRequestMethod()).thenReturn("GET");
+            when(mockExchange.getResponseBody()).thenReturn(responseBody);
+            when(mockExchange.getResponseHeaders()).thenReturn(responseHeaders);
+            when(mockConfig.getString("server.role", "hardcore")).thenReturn("hardcore");
+            when(mockPlugin.getCycleNumber()).thenReturn(5);
+
+            try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+                mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn(java.util.Collections.emptyList());
+
+                handler.handle(mockExchange);
+
+                verify(mockExchange).sendResponseHeaders(eq(200), anyLong());
+                String response = responseBody.toString(StandardCharsets.UTF_8);
+                assertTrue(response.contains("\"status\":\"ok\""));
+                assertTrue(response.contains("\"role\":\"hardcore\""));
+                assertTrue(response.contains("\"cycleNumber\":5"));
+                assertTrue(response.contains("\"playersOnline\":0"));
+            }
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testHealthEndpointWithLobbyRole() throws Exception {
+        int port = getNextPort();
+        HttpRpcServer server = new HttpRpcServer(mockPlugin, port, "127.0.0.1");
+        try {
+            HttpRpcServer.HealthHandler handler = server.new HealthHandler();
+
+            ByteArrayOutputStream responseBody = new ByteArrayOutputStream();
+            Headers responseHeaders = new Headers();
+
+            when(mockExchange.getRequestMethod()).thenReturn("GET");
+            when(mockExchange.getResponseBody()).thenReturn(responseBody);
+            when(mockExchange.getResponseHeaders()).thenReturn(responseHeaders);
+            when(mockConfig.getString("server.role", "hardcore")).thenReturn("lobby");
+            when(mockPlugin.getCycleNumber()).thenReturn(3);
+
+            try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+                // Mock 2 online players
+                mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn(
+                    java.util.Arrays.asList(mock(org.bukkit.entity.Player.class), mock(org.bukkit.entity.Player.class))
+                );
+
+                handler.handle(mockExchange);
+
+                verify(mockExchange).sendResponseHeaders(eq(200), anyLong());
+                String response = responseBody.toString(StandardCharsets.UTF_8);
+                assertTrue(response.contains("\"status\":\"ok\""));
+                assertTrue(response.contains("\"role\":\"lobby\""));
+                assertTrue(response.contains("\"cycleNumber\":3"));
+                assertTrue(response.contains("\"playersOnline\":2"));
+            }
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testHealthEndpointErrorHandling() throws Exception {
+        int port = getNextPort();
+        HttpRpcServer server = new HttpRpcServer(mockPlugin, port, "127.0.0.1");
+        try {
+            HttpRpcServer.HealthHandler handler = server.new HealthHandler();
+
+            when(mockExchange.getRequestMethod()).thenReturn("GET");
+            when(mockConfig.getString("server.role", "hardcore")).thenThrow(new RuntimeException("Config error"));
+
+            handler.handle(mockExchange);
+
+            verify(mockExchange).sendResponseHeaders(500, -1);
+        } finally {
+            server.stop(0);
+        }
     }
 }
