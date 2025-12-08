@@ -82,6 +82,17 @@ public class DeathListener implements Listener {
 
         deathRecap.add(entry);
 
+        // Send a chat message to all players when someone dies in hardcore
+        String deathMsg = "☠ " + dead.getName() + " died in hardcore";
+        Component deathComponent = Component.text(deathMsg);
+        Bukkit.getOnlinePlayers().forEach(p -> {
+            try {
+                p.sendMessage(deathComponent);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to send death message to player " + p.getName() + ": " + e.getMessage());
+            }
+        });
+
         if (enableActionbar) {
             String msg = "Player " + dead.getName() + " died — " + ev.getDeathMessage();
             Component comp = Component.text(msg);

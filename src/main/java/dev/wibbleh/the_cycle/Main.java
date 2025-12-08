@@ -656,6 +656,27 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     /**
+     * Attempts to switch a dead player to spectator mode to allow teleportation.
+     * 
+     * @param p the player to switch to spectator mode
+     * @return true if player was successfully switched to spectator or was not dead, false if switch failed
+     */
+    private boolean switchDeadPlayerToSpectator(Player p) {
+        if (p == null || !p.isDead()) {
+            return true; // Player is not dead, no action needed
+        }
+        
+        try {
+            p.setGameMode(org.bukkit.GameMode.SPECTATOR);
+            LOG.info("Player " + p.getName() + " was dead; switched to spectator mode for teleportation.");
+            return true;
+        } catch (Exception e) {
+            LOG.warning("Failed to switch dead player to spectator mode: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Send a player to the configured lobby. Priority:
      * 1) If lobbyServer is configured and Bungee is registered, send a Bungee Connect message.
      * 2) Else if lobbyWorldName exists on this server, teleport the player there.
@@ -666,11 +687,13 @@ public class Main extends JavaPlugin implements Listener {
     public boolean sendPlayerToLobby(Player p) {
         if (p == null) return false;
         if (p.isDead()) {
-            // Player is on death screen; mark pending move and log. Actual move will occur on respawn.
-            pendingLobbyMoves.add(p.getUniqueId());
-            savePendingMovesAsync();
-            LOG.info("Player " + p.getName() + " is dead; will send to lobby on respawn.");
-            return true;
+            if (!switchDeadPlayerToSpectator(p)) {
+                // Fallback: mark pending move and wait for respawn
+                pendingLobbyMoves.add(p.getUniqueId());
+                savePendingMovesAsync();
+                LOG.info("Player " + p.getName() + " is dead; will send to lobby on respawn.");
+                return true;
+            }
         }
         if (!lobbyServer.isEmpty() && registeredBungeeChannel) {
             try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -854,10 +877,13 @@ public class Main extends JavaPlugin implements Listener {
     public boolean sendPlayerToServer(org.bukkit.entity.Player p, String serverName) {
         if (p == null || serverName == null || serverName.isEmpty()) return false;
         if (p.isDead()) {
-            pendingHardcoreMoves.add(p.getUniqueId());
-            savePendingMovesAsync();
-            LOG.info("Player " + p.getName() + " is dead; will move to hardcore on respawn.");
-            return true;
+            if (!switchDeadPlayerToSpectator(p)) {
+                // Fallback: mark pending move and wait for respawn
+                pendingHardcoreMoves.add(p.getUniqueId());
+                savePendingMovesAsync();
+                LOG.info("Player " + p.getName() + " is dead; will move to hardcore on respawn.");
+                return true;
+            }
         }
         if (!registeredBungeeChannel) {
             try {

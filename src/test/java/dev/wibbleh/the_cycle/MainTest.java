@@ -58,6 +58,15 @@ class MainTest {
         // Common mock setup
     }
 
+    /**
+     * Helper method to set a private field value using reflection.
+     */
+    private void setPrivateField(Object target, String fieldName, Object value) throws Exception {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
     @Test
     void testEscapeMethod() throws Exception {
         Main plugin = mock(Main.class, CALLS_REAL_METHODS);
@@ -280,6 +289,53 @@ class MainTest {
         assertTrue(payload.contains("Time:"));
         assertTrue(payload.contains("Cause:"));
         assertTrue(payload.contains("Drops:"));
+    }
+
+    @Test
+    void testSendPlayerToLobbyWithDeadPlayerSwitchesToSpectator() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        
+        // Setup
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        when(mockPlayer.isDead()).thenReturn(true);
+        when(mockPlayer.getName()).thenReturn("DeadPlayer");
+        
+        // Initialize required private fields using helper method
+        setPrivateField(plugin, "lobbyServer", "");
+        setPrivateField(plugin, "lobbyWorldName", "");
+        
+        // Access private sendPlayerToLobby method
+        Method sendPlayerToLobbyMethod = Main.class.getDeclaredMethod("sendPlayerToLobby", org.bukkit.entity.Player.class);
+        sendPlayerToLobbyMethod.setAccessible(true);
+        
+        // Invoke the method
+        sendPlayerToLobbyMethod.invoke(plugin, mockPlayer);
+        
+        // Verify that setGameMode was called with SPECTATOR
+        verify(mockPlayer, times(1)).setGameMode(org.bukkit.GameMode.SPECTATOR);
+    }
+
+    @Test
+    void testSendPlayerToServerWithDeadPlayerSwitchesToSpectator() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        
+        // Setup
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        when(mockPlayer.isDead()).thenReturn(true);
+        when(mockPlayer.getName()).thenReturn("DeadPlayer");
+        
+        // Initialize required private field using helper method
+        setPrivateField(plugin, "registeredBungeeChannel", true);
+        
+        // Invoke the method
+        boolean result = plugin.sendPlayerToServer(mockPlayer, "hardcore");
+        
+        // Verify that setGameMode was called with SPECTATOR
+        verify(mockPlayer, times(1)).setGameMode(org.bukkit.GameMode.SPECTATOR);
+        // Should return true even if dead (after switching to spectator)
+        assertTrue(result);
     }
 
     @Test
