@@ -280,4 +280,44 @@ class MainTest {
         assertTrue(payload.contains("Cause:"));
         assertTrue(payload.contains("Drops:"));
     }
+
+    @Test
+    void testSendPlayerToLobbyWithDeadPlayerSwitchesToSpectator() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        
+        // Setup
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        when(mockPlayer.isDead()).thenReturn(true);
+        when(mockPlayer.getName()).thenReturn("DeadPlayer");
+        
+        // Access private sendPlayerToLobby method
+        Method sendPlayerToLobbyMethod = Main.class.getDeclaredMethod("sendPlayerToLobby", org.bukkit.entity.Player.class);
+        sendPlayerToLobbyMethod.setAccessible(true);
+        
+        // Invoke the method
+        sendPlayerToLobbyMethod.invoke(plugin, mockPlayer);
+        
+        // Verify that setGameMode was called with SPECTATOR
+        verify(mockPlayer, times(1)).setGameMode(org.bukkit.GameMode.SPECTATOR);
+    }
+
+    @Test
+    void testSendPlayerToServerWithDeadPlayerSwitchesToSpectator() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        
+        // Setup
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        when(mockPlayer.isDead()).thenReturn(true);
+        when(mockPlayer.getName()).thenReturn("DeadPlayer");
+        
+        // Invoke the method
+        boolean result = plugin.sendPlayerToServer(mockPlayer, "hardcore");
+        
+        // Verify that setGameMode was called with SPECTATOR
+        verify(mockPlayer, times(1)).setGameMode(org.bukkit.GameMode.SPECTATOR);
+        // Should return true even if dead (after switching to spectator)
+        assertTrue(result);
+    }
 }

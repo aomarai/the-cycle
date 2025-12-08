@@ -575,11 +575,18 @@ public class Main extends JavaPlugin implements Listener {
     private boolean sendPlayerToLobby(Player p) {
         if (p == null) return false;
         if (p.isDead()) {
-            // Player is on death screen; mark pending move and log. Actual move will occur on respawn.
-            pendingLobbyMoves.add(p.getUniqueId());
-            savePendingMovesAsync();
-            LOG.info("Player " + p.getName() + " is dead; will send to lobby on respawn.");
-            return true;
+            // Player is on death screen; switch to spectator mode to allow teleportation
+            try {
+                p.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                LOG.info("Player " + p.getName() + " was dead; switched to spectator mode for teleportation.");
+            } catch (Exception e) {
+                LOG.warning("Failed to switch dead player to spectator mode: " + e.getMessage());
+                // Fallback: mark pending move and wait for respawn
+                pendingLobbyMoves.add(p.getUniqueId());
+                savePendingMovesAsync();
+                LOG.info("Player " + p.getName() + " is dead; will send to lobby on respawn.");
+                return true;
+            }
         }
         if (!lobbyServer.isEmpty() && registeredBungeeChannel) {
             try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -763,10 +770,18 @@ public class Main extends JavaPlugin implements Listener {
     public boolean sendPlayerToServer(org.bukkit.entity.Player p, String serverName) {
         if (p == null || serverName == null || serverName.isEmpty()) return false;
         if (p.isDead()) {
-            pendingHardcoreMoves.add(p.getUniqueId());
-            savePendingMovesAsync();
-            LOG.info("Player " + p.getName() + " is dead; will move to hardcore on respawn.");
-            return true;
+            // Player is on death screen; switch to spectator mode to allow transfer
+            try {
+                p.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                LOG.info("Player " + p.getName() + " was dead; switched to spectator mode for server transfer.");
+            } catch (Exception e) {
+                LOG.warning("Failed to switch dead player to spectator mode: " + e.getMessage());
+                // Fallback: mark pending move and wait for respawn
+                pendingHardcoreMoves.add(p.getUniqueId());
+                savePendingMovesAsync();
+                LOG.info("Player " + p.getName() + " is dead; will move to hardcore on respawn.");
+                return true;
+            }
         }
         if (!registeredBungeeChannel) {
             try {

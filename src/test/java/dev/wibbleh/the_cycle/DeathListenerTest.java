@@ -243,4 +243,23 @@ class DeathListenerTest {
             assertFalse(aliveMap.get(playerUUID));
         }
     }
+
+    @Test
+    void testOnPlayerDeathSendsSkullChatMessage() {
+        DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
+        
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            List<Player> onlinePlayers = Arrays.asList(mockPlayer);
+            mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn((Collection) onlinePlayers);
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
+            
+            listener.onPlayerDeath(mockEvent);
+            
+            // Verify that sendMessage was called with a Component containing the skull emoji and player name
+            verify(mockPlayer, atLeastOnce()).sendMessage(argThat((Component comp) -> 
+                comp != null && comp.toString().contains("TestPlayer") && comp.toString().contains("died in hardcore")
+            ));
+        }
+    }
 }
