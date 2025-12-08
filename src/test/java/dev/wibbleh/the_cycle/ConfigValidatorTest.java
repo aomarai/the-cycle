@@ -41,7 +41,7 @@ class ConfigValidatorTest {
         ConfigValidator.ValidationResult result = ConfigValidator.validate(cfg);
 
         assertTrue(result.hasErrors(), "Invalid role should produce error");
-        assertTrue(result.errors().getFirst().contains("Invalid server.role"));
+        assertTrue(result.errors().get(0).contains("Invalid server.role"));
     }
 
     @Test
@@ -152,7 +152,7 @@ class ConfigValidatorTest {
         ConfigValidator.ValidationResult result = ConfigValidator.validate(null);
 
         assertTrue(result.hasErrors(), "Null config should produce error");
-        assertEquals("Configuration is null", result.errors().getFirst());
+        assertEquals("Configuration is null", result.errors().get(0));
     }
 
     @Test

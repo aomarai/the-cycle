@@ -92,6 +92,16 @@ public class Main extends JavaPlugin implements Listener {
     public void onEnable() {
         saveDefaultConfig();
         cfg = getConfig();
+        
+        // Validate configuration early to catch issues before they cause runtime problems
+        ConfigValidator.ValidationResult validation = ConfigValidator.validate(cfg);
+        validation.logResults();
+        if (validation.hasErrors()) {
+            LOG.severe("Configuration validation failed. Please fix the errors above and restart the server.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        
         // ensure data folder and pending moves file
         pendingMovesFile = new File(getDataFolder(), "pending_moves.json");
 
@@ -638,26 +648,19 @@ public class Main extends JavaPlugin implements Listener {
                  String caller = requester instanceof org.bukkit.entity.Player ? ((org.bukkit.entity.Player) requester).getUniqueId().toString() : "console";
                  String payload = "{\"action\":\"" + action + "\",\"caller\":\"" + caller + "\"}";
                  String sig = RpcHttpUtil.computeHmacHex(rpcSecret, payload);
-                 java.net.URL u = new java.net.URL(hardcoreHttpUrl);
-                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-                 conn.setRequestMethod("POST");
-                 conn.setDoOutput(true);
-                 conn.setRequestProperty("Content-Type", "application/json");
-                 conn.setRequestProperty("X-Signature", sig);
-                 conn.setConnectTimeout(3000);
-                 conn.setReadTimeout(5000);
-                 try (OutputStream os = conn.getOutputStream()) {
-                     os.write(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                 }
-                 int code = conn.getResponseCode();
-                 if (code >= 200 && code < 300) {
-                     LOG.info("Forwarded RPC via HTTP to " + hardcoreHttpUrl + " status=" + code);
+                 
+                 // Use HttpRetryUtil for resilient HTTP POST with automatic retry and exponential backoff
+                 HttpRetryUtil.RetryConfig retryConfig = HttpRetryUtil.RetryConfig.defaults();
+                 HttpRetryUtil.HttpResult result = HttpRetryUtil.postWithRetry(hardcoreHttpUrl, payload, sig, retryConfig);
+                 
+                 if (result.success()) {
+                     LOG.info("Forwarded RPC via HTTP to " + hardcoreHttpUrl + " status=" + result.statusCode() + " (attempts=" + result.attempts() + ")");
                      return true;
                  } else {
-                     LOG.warning("HTTP RPC forward returned non-2xx: " + code);
+                     LOG.warning("HTTP RPC forward failed after " + result.attempts() + " attempts: " + result.errorMessage());
                  }
              } catch (Exception e) {
-                 LOG.warning("HTTP RPC forward failed: " + e.getMessage());
+                 LOG.warning("HTTP RPC forward setup failed: " + e.getMessage());
              }
          }
 
@@ -839,38 +842,33 @@ public class Main extends JavaPlugin implements Listener {
             LOG.info("No lobby_http_url configured; skipping world-ready notification.");
             return;
         }
+        
+        String payload = "{\"action\":\"world-ready\",\"cycle\":" + cycle + "}";
+        // Avoid notifying ourself: if lobbyUrl points to our own embedded HTTP listener, skip the POST.
         try {
-            String payload = "{\"action\":\"world-ready\",\"cycle\":" + cycle + "}";
-            // Avoid notifying ourself: if lobbyUrl points to our own embedded HTTP listener, skip the POST.
-            try {
-                java.net.URL parsed = new java.net.URL(lobbyUrl);
-                String host = parsed.getHost();
-                int port = parsed.getPort() == -1 ? parsed.getDefaultPort() : parsed.getPort();
-                boolean isLoopback = "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || host.equals(java.net.InetAddress.getLocalHost().getHostAddress());
-                if (isLoopback && httpRpcServer != null && port == configuredHttpPort) {
-                    LOG.info("Lobby URL points to this server's own HTTP listener; skipping HTTP notify to avoid self-delivery: " + lobbyUrl);
-                    return;
-                }
-            } catch (Exception e) {
-                // ignore URL parse errors and continue attempting to notify
+            java.net.URL parsed = new java.net.URL(lobbyUrl);
+            String host = parsed.getHost();
+            int port = parsed.getPort() == -1 ? parsed.getDefaultPort() : parsed.getPort();
+            boolean isLoopback = "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || host.equals(java.net.InetAddress.getLocalHost().getHostAddress());
+            if (isLoopback && httpRpcServer != null && port == configuredHttpPort) {
+                LOG.info("Lobby URL points to this server's own HTTP listener; skipping HTTP notify to avoid self-delivery: " + lobbyUrl);
+                return;
             }
+        } catch (Exception e) {
+            // ignore URL parse errors and continue attempting to notify
+        }
 
+        try {
             String sig = RpcHttpUtil.computeHmacHex(rpcSecret, payload);
-            try {
-                java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder().build();
-                java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
-                        .uri(java.net.URI.create(lobbyUrl))
-                        .timeout(java.time.Duration.ofSeconds(60))
-                        .header("Content-Type", "application/json")
-                        .header("X-Signature", sig)
-                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload, java.nio.charset.StandardCharsets.UTF_8))
-                        .build();
-                java.net.http.HttpResponse<Void> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.discarding());
-                int code = resp.statusCode();
-                if (code >= 200 && code < 300) LOG.info("Notified lobby of world-ready: " + lobbyUrl + " status=" + code);
-                else LOG.warning("Lobby notification returned non-2xx: " + code);
-            } catch (Exception e) {
-                LOG.warning("Failed to notify lobby of world-ready: " + e.getMessage());
+            
+            // Use HttpRetryUtil for resilient HTTP POST with retry
+            HttpRetryUtil.RetryConfig retryConfig = HttpRetryUtil.RetryConfig.defaults();
+            HttpRetryUtil.HttpResult result = HttpRetryUtil.postWithRetry(lobbyUrl, payload, sig, retryConfig);
+            
+            if (result.success()) {
+                LOG.info("Notified lobby of world-ready: " + lobbyUrl + " status=" + result.statusCode() + " (attempts=" + result.attempts() + ")");
+            } else {
+                LOG.warning("Failed to notify lobby of world-ready after " + result.attempts() + " attempts: " + result.errorMessage());
             }
         } catch (Exception e) {
             LOG.warning("Failed to notify lobby of world-ready: " + e.getMessage());

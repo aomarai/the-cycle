@@ -37,7 +37,7 @@ class RpcQueueStorageTest {
         List<RpcQueueStorage.QueuedRpc> loaded = RpcQueueStorage.load(file);
 
         assertEquals(1, loaded.size(), "Should load one RPC");
-        RpcQueueStorage.QueuedRpc loadedRpc = loaded.getFirst();
+        RpcQueueStorage.QueuedRpc loadedRpc = loaded.get(0);
         assertEquals("cycle-now", loadedRpc.action());
         assertEquals("test-caller", loadedRpc.caller());
         assertEquals(1, loadedRpc.attempts());

@@ -159,6 +159,11 @@ public final class HttpRetryUtil {
      * @return delay in milliseconds
      */
     private static int calculateBackoff(int attemptNumber, int baseDelayMs, int maxDelayMs) {
+        // Handle edge case where delays are disabled
+        if (baseDelayMs == 0 || maxDelayMs == 0) {
+            return 0;
+        }
+        
         // Exponential: delay = baseDelay * 2^attemptNumber
         int exponentialDelay = (int) (baseDelayMs * Math.pow(2, attemptNumber));
         // Cap at max delay

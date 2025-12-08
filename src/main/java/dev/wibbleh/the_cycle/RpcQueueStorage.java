@@ -65,12 +65,14 @@ public final class RpcQueueStorage {
         if (file == null || rpcs == null) return;
 
         JSONArray array = new JSONArray();
+        long now = Instant.now().getEpochSecond();
+        
         for (QueuedRpc rpc : rpcs) {
             if (rpc == null) continue;
-            // Skip expired RPCs during save
-            if (rpc.isExpired()) {
-                LOG.info("Skipping expired RPC during save: action=" + rpc.action + " age=" +
-                        (Instant.now().getEpochSecond() - rpc.timestamp) + "s");
+            // Skip expired RPCs during save (use current timestamp to avoid repeated calls)
+            long age = now - rpc.timestamp;
+            if (age > MAX_AGE_SECONDS) {
+                LOG.info("Skipping expired RPC during save: action=" + rpc.action + " age=" + age + "s");
                 continue;
             }
 
