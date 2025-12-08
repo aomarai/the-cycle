@@ -18,9 +18,13 @@ import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
+import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.title.Title;
 
 public class Main extends JavaPlugin implements Listener {
     private static final Logger LOG = Logger.getLogger("HardcoreCycle");
@@ -30,7 +34,7 @@ public class Main extends JavaPlugin implements Listener {
     // Total wins counter: number of times the ender dragon has been killed
     private final AtomicInteger totalWins = new AtomicInteger(0);
     // Track if a cycle start request is pending (to avoid duplicate auto-starts)
-    private final java.util.concurrent.atomic.AtomicBoolean cycleStartPending = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private final AtomicBoolean cycleStartPending = new AtomicBoolean(false);
     // Death recap data collected per-cycle
     private final List<Map<String, Object>> deathRecap = new ArrayList<>();
     // Track alive players by UUID
@@ -128,7 +132,7 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         cycleFile = new File(getDataFolder(), "cycles.json");
-        statsFile = new File(getDataFolder(), "stats.json");
+        statsFile = new File(getDataFolder(), "stats.txt");
         loadCycleNumber();
         loadStats();
         // wire services
@@ -374,15 +378,15 @@ public class Main extends JavaPlugin implements Listener {
         LOG.info("Generating world: " + newWorldName);
         
         // Show title to all online players indicating new cycle is starting
-        Component title = Component.text("CYCLE " + next, net.kyori.adventure.text.format.NamedTextColor.GREEN);
-        Component subtitle = Component.text("Generating new world...", net.kyori.adventure.text.format.NamedTextColor.GRAY);
-        net.kyori.adventure.title.Title titleScreen = net.kyori.adventure.title.Title.title(
+        Component title = Component.text("CYCLE " + next, NamedTextColor.GREEN);
+        Component subtitle = Component.text("Generating new world...", NamedTextColor.GRAY);
+        Title titleScreen = Title.title(
             title,
             subtitle,
-            net.kyori.adventure.title.Title.Times.times(
-                java.time.Duration.ofMillis(500),  // fade in
-                java.time.Duration.ofSeconds(3),    // stay
-                java.time.Duration.ofSeconds(1)     // fade out
+            Title.Times.times(
+                Duration.ofMillis(500),  // fade in
+                Duration.ofSeconds(3),    // stay
+                Duration.ofSeconds(1)     // fade out
             )
         );
         
@@ -444,8 +448,7 @@ public class Main extends JavaPlugin implements Listener {
                 Bukkit.getOnlinePlayers().forEach(p -> {
                     try { 
                         p.teleport(spawn);
-                        // Add player to current cycle when they enter the hardcore world
-                        playersInCurrentCycle.add(p.getUniqueId());
+                        // Player will be added to current cycle in PlayerJoinListener.onPlayerChangedWorld
                     } catch (Exception ex) { LOG.warning("Failed to teleport player " + p.getName() + " to new world: " + ex.getMessage()); }
                     aliveMap.put(p.getUniqueId(), true);
                 });
@@ -1111,15 +1114,15 @@ public class Main extends JavaPlugin implements Listener {
     private void showCycleStartTitle(Player p) {
         if (p == null) return;
         try {
-            Component title = Component.text("CYCLE " + cycleNumber.get(), net.kyori.adventure.text.format.NamedTextColor.GOLD);
-            Component subtitle = Component.text("Good luck!", net.kyori.adventure.text.format.NamedTextColor.YELLOW);
-            net.kyori.adventure.title.Title titleScreen = net.kyori.adventure.title.Title.title(
+            Component title = Component.text("CYCLE " + cycleNumber.get(), NamedTextColor.GOLD);
+            Component subtitle = Component.text("Good luck!", NamedTextColor.YELLOW);
+            Title titleScreen = Title.title(
                 title,
                 subtitle,
-                net.kyori.adventure.title.Title.Times.times(
-                    java.time.Duration.ofMillis(500),  // fade in
-                    java.time.Duration.ofSeconds(3),    // stay
-                    java.time.Duration.ofSeconds(1)     // fade out
+                Title.Times.times(
+                    Duration.ofMillis(500),  // fade in
+                    Duration.ofSeconds(3),    // stay
+                    Duration.ofSeconds(1)     // fade out
                 )
             );
             p.showTitle(titleScreen);
@@ -1334,17 +1337,20 @@ public class Main extends JavaPlugin implements Listener {
 
         // Send RPC to hardcore to trigger a new cycle
         boolean forwarded = sendRpcToHardcore("cycle-now", null);
-        if (forwarded) {
-            // Notify players that a new cycle is being prepared
-            Bukkit.getOnlinePlayers().forEach(p -> {
-                if (!p.getWorld().getName().startsWith("hardcore_cycle_")) {
-                    p.sendMessage("§aA new cycle is starting! Please wait while the world is being generated...");
-                }
-            });
-        } else {
-            LOG.warning("Failed to auto-start cycle - RPC forwarding failed.");
+        if (!forwarded) {
+            // RPC failed - clear the pending flag so we can retry later
+            LOG.warning("Failed to auto-start cycle - RPC forwarding failed. Will retry on next player join.");
             cycleStartPending.set(false);
+            return;
         }
+        
+        // RPC forwarded successfully - notify players
+        Bukkit.getOnlinePlayers().forEach(p -> {
+            if (!p.getWorld().getName().startsWith("hardcore_cycle_")) {
+                p.sendMessage("§aA new cycle is starting! Please wait while the world is being generated...");
+            }
+        });
+        // Flag will be cleared when world becomes ready via clearCycleStartPending()
     }
 
     /**

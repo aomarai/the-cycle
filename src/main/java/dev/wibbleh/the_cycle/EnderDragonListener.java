@@ -4,7 +4,6 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
-import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -29,7 +28,6 @@ public class EnderDragonListener implements Listener {
     @EventHandler
     public void onEnderDragonDeath(EntityDeathEvent event) {
         if (event.getEntityType() != EntityType.ENDER_DRAGON) return;
-        if (!(event.getEntity() instanceof EnderDragon)) return;
 
         plugin.getLogger().info("Ender Dragon killed! Recording win and resetting attempt counter.");
 
