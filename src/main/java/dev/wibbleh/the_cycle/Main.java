@@ -25,10 +25,16 @@ import java.util.logging.Logger;
 public class Main extends JavaPlugin implements Listener {
     private static final Logger LOG = Logger.getLogger("HardcoreCycle");
     private final AtomicInteger cycleNumber = new AtomicInteger(1);
+    // Attempt counter: number of cycles attempted before beating Minecraft (killing ender dragon)
+    private final AtomicInteger attemptsSinceLastWin = new AtomicInteger(0);
+    // Total wins counter: number of times the ender dragon has been killed
+    private final AtomicInteger totalWins = new AtomicInteger(0);
     // Death recap data collected per-cycle
     private final List<Map<String, Object>> deathRecap = new ArrayList<>();
     // Track alive players by UUID
     private final Map<UUID, Boolean> aliveMap = new HashMap<>();
+    // Track players who are in the current active cycle (prevents mid-cycle joins)
+    private final Set<UUID> playersInCurrentCycle = Collections.synchronizedSet(new HashSet<>());
     private FileConfiguration cfg;
     private boolean enableScoreboard;
     private boolean enableBossBar;
@@ -40,6 +46,8 @@ public class Main extends JavaPlugin implements Listener {
     private boolean registeredBungeeChannel = false;
     // Cycle tracking
     private File cycleFile;
+    // Stats tracking file for attempts and wins
+    private File statsFile;
     // Server role — when false this instance acts as a lobby and must not create/delete worlds
     private boolean isHardcoreBackend = true;
     // RPC / forwarding configuration
@@ -118,7 +126,9 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         cycleFile = new File(getDataFolder(), "cycles.json");
+        statsFile = new File(getDataFolder(), "stats.json");
         loadCycleNumber();
+        loadStats();
         // wire services
         boolean deletePrev = cfg.getBoolean("behavior.delete_previous_worlds", true);
         boolean deferDelete = cfg.getBoolean("behavior.defer_delete_until_restart", false);
@@ -128,6 +138,8 @@ public class Main extends JavaPlugin implements Listener {
         worldDeletionService = new WorldDeletionService(this, deletePrev, deferDelete, asyncDelete);
         webhookService = new WebhookService(this, webhookUrl);
         DeathListener dl = new DeathListener(this, enableActionbarLocal, sharedDeath, aliveMap, deathRecap);
+        EnderDragonListener edl = new EnderDragonListener(this);
+        PlayerJoinListener pjl = new PlayerJoinListener(this);
         commandHandler = new CommandHandler(this);
 
         // Register command executor and tab completer so /cycle works and supports autocomplete
@@ -188,6 +200,8 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         getServer().getPluginManager().registerEvents(dl, this);
+        getServer().getPluginManager().registerEvents(edl, this);
+        getServer().getPluginManager().registerEvents(pjl, this);
 
         if (enableBossBar) {
             bossBar = Bukkit.createBossBar("Next world in progress...", BarColor.GREEN, BarStyle.SOLID);
@@ -207,11 +221,12 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     /**
-     * Plugin disable lifecycle method. Persist cycle number to disk.
+     * Plugin disable lifecycle method. Persist cycle number and stats to disk.
      */
     @Override
     public void onDisable() {
         writeCycleFile(cycleNumber.get());
+        writeStatsFile();
         savePendingMoves();
     }
 
@@ -257,6 +272,9 @@ public class Main extends JavaPlugin implements Listener {
             return;
         }
         int next = cycleNumber.incrementAndGet();
+        // Increment attempts counter (will be reset when dragon is killed)
+        attemptsSinceLastWin.incrementAndGet();
+        writeStatsFile();
         updateScoreboard();
         writeCycleFile(next);
 
@@ -265,6 +283,8 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         deathRecap.clear();
+        // Clear the active cycle players set - new cycle means players can join again
+        playersInCurrentCycle.clear();
 
         // Schedule generation after ensuring all players have been moved to lobby.
         final int cycleNum = next;
@@ -350,7 +370,26 @@ public class Main extends JavaPlugin implements Listener {
     private void doGenerateWorld(int next) {
         String newWorldName = "hardcore_cycle_" + next;
         LOG.info("Generating world: " + newWorldName);
-        Bukkit.getOnlinePlayers().forEach(p -> { try { p.sendMessage("[HardcoreCycle] Generating world: " + newWorldName); } catch (Exception ignored) {} });
+        
+        // Show title to all online players indicating new cycle is starting
+        Component title = Component.text("CYCLE " + next, net.kyori.adventure.text.format.NamedTextColor.GREEN);
+        Component subtitle = Component.text("Generating new world...", net.kyori.adventure.text.format.NamedTextColor.GRAY);
+        net.kyori.adventure.title.Title titleScreen = net.kyori.adventure.title.Title.title(
+            title,
+            subtitle,
+            net.kyori.adventure.title.Title.Times.times(
+                java.time.Duration.ofMillis(500),  // fade in
+                java.time.Duration.ofSeconds(3),    // stay
+                java.time.Duration.ofSeconds(1)     // fade out
+            )
+        );
+        
+        Bukkit.getOnlinePlayers().forEach(p -> { 
+            try { 
+                p.showTitle(titleScreen);
+                p.sendMessage("[HardcoreCycle] Generating world: " + newWorldName); 
+            } catch (Exception ignored) {} 
+        });
 
         World newWorld = null;
         try {
@@ -401,7 +440,11 @@ public class Main extends JavaPlugin implements Listener {
             final org.bukkit.Location spawn = newWorld.getSpawnLocation();
             if (spawn != null) {
                 Bukkit.getOnlinePlayers().forEach(p -> {
-                    try { p.teleport(spawn); } catch (Exception ex) { LOG.warning("Failed to teleport player " + p.getName() + " to new world: " + ex.getMessage()); }
+                    try { 
+                        p.teleport(spawn);
+                        // Add player to current cycle when they enter the hardcore world
+                        playersInCurrentCycle.add(p.getUniqueId());
+                    } catch (Exception ex) { LOG.warning("Failed to teleport player " + p.getName() + " to new world: " + ex.getMessage()); }
                     aliveMap.put(p.getUniqueId(), true);
                 });
             } else {
@@ -473,11 +516,54 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     /**
-     * Update the server scoreboard with the current cycle number when enabled.
+     * Load stats (attempts and wins) from disk. If the file is missing or invalid, defaults to 0.
+     */
+    private void loadStats() {
+        try {
+            ensureDataFolderExists();
+            if (!statsFile.exists()) {
+                writeStatsFile();
+                return;
+            }
+            try (BufferedReader r = new BufferedReader(new FileReader(statsFile))) {
+                String attemptsLine = r.readLine();
+                String winsLine = r.readLine();
+                if (attemptsLine != null && !attemptsLine.trim().isEmpty()) {
+                    attemptsSinceLastWin.set(Integer.parseInt(attemptsLine.trim()));
+                }
+                if (winsLine != null && !winsLine.trim().isEmpty()) {
+                    totalWins.set(Integer.parseInt(winsLine.trim()));
+                }
+            }
+        } catch (Exception e) {
+            LOG.warning("Failed to read stats file, defaulting to 0: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Persist stats (attempts and wins) to the plugin data folder (stats.json).
+     */
+    private void writeStatsFile() {
+        try {
+            ensureDataFolderExists();
+            try (BufferedWriter w = new BufferedWriter(new FileWriter(statsFile))) {
+                w.write(String.valueOf(attemptsSinceLastWin.get()));
+                w.newLine();
+                w.write(String.valueOf(totalWins.get()));
+            }
+        } catch (Exception e) {
+            LOG.severe("Unable to write stats file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Update the server scoreboard with the current cycle number, attempts, and wins when enabled.
      */
     private void updateScoreboard() {
         if (!enableScoreboard || objective == null) return;
         objective.getScore("Cycle:").setScore(cycleNumber.get());
+        objective.getScore("Attempts:").setScore(attemptsSinceLastWin.get());
+        objective.getScore("Wins:").setScore(totalWins.get());
     }
 
     /**
@@ -550,7 +636,7 @@ public class Main extends JavaPlugin implements Listener {
      *
      * @param p player to move to lobby
      */
-    private boolean sendPlayerToLobby(Player p) {
+    public boolean sendPlayerToLobby(Player p) {
         if (p == null) return false;
         if (p.isDead()) {
             // Player is on death screen; mark pending move and log. Actual move will occur on respawn.
@@ -952,7 +1038,10 @@ public class Main extends JavaPlugin implements Listener {
             return;
         }
         if (seconds <= 0) {
-            for (Player p : Bukkit.getOnlinePlayers()) sendPlayerToServer(p, target);
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                showCycleStartTitle(p);
+                sendPlayerToServer(p, target);
+            }
             return;
         }
         // Determine targets depending on broadcast config and last requester
@@ -986,6 +1075,7 @@ public class Main extends JavaPlugin implements Listener {
                         } else {
                             pendingHardcoreMoves.remove(p.getUniqueId());
                             savePendingMovesAsync();
+                            showCycleStartTitle(p);
                             sendPlayerToServer(p, target);
                         }
                     }
@@ -1008,6 +1098,29 @@ public class Main extends JavaPlugin implements Listener {
                 remaining--;
             }
         }.runTaskTimer(this, 0L, 20L);
+    }
+
+    /**
+     * Show a large title screen to a player when they're about to enter a new cycle.
+     */
+    private void showCycleStartTitle(Player p) {
+        if (p == null) return;
+        try {
+            Component title = Component.text("CYCLE " + cycleNumber.get(), net.kyori.adventure.text.format.NamedTextColor.GOLD);
+            Component subtitle = Component.text("Good luck!", net.kyori.adventure.text.format.NamedTextColor.YELLOW);
+            net.kyori.adventure.title.Title titleScreen = net.kyori.adventure.title.Title.title(
+                title,
+                subtitle,
+                net.kyori.adventure.title.Title.Times.times(
+                    java.time.Duration.ofMillis(500),  // fade in
+                    java.time.Duration.ofSeconds(3),    // stay
+                    java.time.Duration.ofSeconds(1)     // fade out
+                )
+            );
+            p.showTitle(titleScreen);
+        } catch (Exception e) {
+            LOG.warning("Failed to show cycle start title to " + p.getName() + ": " + e.getMessage());
+        }
     }
 
     /**
@@ -1143,5 +1256,44 @@ public class Main extends JavaPlugin implements Listener {
      */
     public int getCountdownSendToHardcoreSeconds() {
         return countdownSendToHardcoreSeconds;
+    }
+
+    /**
+     * Record an ender dragon kill: increment wins counter, reset attempts counter.
+     */
+    public void recordDragonKill() {
+        totalWins.incrementAndGet();
+        attemptsSinceLastWin.set(0);
+        writeStatsFile();
+        updateScoreboard();
+        LOG.info("Dragon kill recorded! Total wins: " + totalWins.get() + ", attempts reset to 0.");
+    }
+
+    /**
+     * Get the current number of attempts since the last dragon kill.
+     */
+    public int getAttemptsSinceLastWin() {
+        return attemptsSinceLastWin.get();
+    }
+
+    /**
+     * Get the total number of dragon kills (wins).
+     */
+    public int getTotalWins() {
+        return totalWins.get();
+    }
+
+    /**
+     * Check if a player is in the current active cycle.
+     */
+    public boolean isPlayerInCurrentCycle(UUID playerId) {
+        return playersInCurrentCycle.contains(playerId);
+    }
+
+    /**
+     * Add a player to the current active cycle.
+     */
+    public void addPlayerToCurrentCycle(UUID playerId) {
+        playersInCurrentCycle.add(playerId);
     }
 }
