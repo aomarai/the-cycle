@@ -280,7 +280,6 @@ public class Main extends JavaPlugin implements Listener {
                 LOG.info("Moving all online players to lobby immediately before generating new world (pre-generation countdown disabled).");
                 for (Player p : playersToMove) {
                     try { sendPlayerToLobby(p); } catch (Exception ex) { LOG.warning("Failed to move player " + p.getName() + " to lobby before generation: " + ex.getMessage()); }
-                    aliveMap.put(p.getUniqueId(), true);
                 }
             }
         } else {
