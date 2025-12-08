@@ -81,7 +81,7 @@ class HttpRpcServerTest {
     }
 
     @Test
-    void testRejectsInvalidSignature() throws Exception {
+    void shouldReturn403WhenSignatureIsInvalid() throws Exception {
         int port = getNextPort();
         HttpRpcServer server = new HttpRpcServer(mockPlugin, port, "127.0.0.1");
         try {
