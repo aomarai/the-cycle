@@ -82,7 +82,6 @@ The project uses GitHub Actions to automatically run tests on every push and pul
 
 To view test results and coverage reports, check the "Actions" tab in GitHub after pushing changes.
 
-## Test Coverage by Component
 
 ### 1. CommandHandler (10 tests)
 
