@@ -13,6 +13,10 @@ behavior:
   defer_delete_until_restart: false
   async_delete: true
   shared_death: false
+  # Automatically start new cycles when players join the lobby (lobby server only)
+  # When true, the lobby will automatically request a new cycle from the hardcore server
+  # when players are waiting and no cycle is active. Default: true
+  auto_start_cycles: true
 
 # Server role controls whether this instance is responsible for creating/deleting worlds.
 # Values: "hardcore" (the backend that hosts the cyclical hardcore worlds) or "lobby"
