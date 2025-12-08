@@ -6,11 +6,13 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Simple command handler that provides a minimal interface for the /cycle command.
@@ -41,7 +43,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
      * @return true when the command was handled
      */
     @Override
-    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String label, @NotNull String[] args) {
         return handle(sender, cmd, label, args);
     }
 
@@ -78,8 +80,14 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                         sender.sendMessage("Cycling world now (executed on this hardcore backend).");
                     } else {
                         boolean forwarded = m.sendRpcToHardcore("cycle-now", sender);
-                        if (forwarded) sender.sendMessage("Cycle request forwarded to hardcore backend.");
-                        else sender.sendMessage("Failed to forward cycle request; run /cycle on your hardcore backend.");
+                        if (forwarded) {
+                            // Keep the original single-line response expected by unit tests.
+                            sender.sendMessage("Cycle request forwarded to hardcore backend.");
+                            // Informational log: world-ready notifications will move players when available.
+                            Logger.getLogger("HardcoreCycle").info("RPC forwarded to hardcore; lobby will move players when the hardcore server notifies world-ready.");
+                        } else {
+                            sender.sendMessage("Failed to forward cycle request; run /cycle on your hardcore backend.");
+                        }
                     }
                 } else {
                     sender.sendMessage("Cycling world now.");
@@ -107,7 +115,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
      * @return list of suggestions (may be empty)
      */
     @Override
-    public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String alias, @NotNull String[] args) {
         if (!cmd.getName().equalsIgnoreCase("cycle")) return Collections.emptyList();
         if (args.length == 1) {
             List<String> subs = Arrays.asList("setcycle", "cycle-now", "status");

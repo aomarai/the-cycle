@@ -6,6 +6,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -14,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class DeathListener implements Listener {
@@ -22,6 +25,9 @@ public class DeathListener implements Listener {
     private final boolean enableSharedDeath;
     private final Map<UUID, Boolean> aliveMap;
     private final List<Map<String, Object>> deathRecap;
+    private final AtomicBoolean sharedDeathInProgress = new AtomicBoolean(false);
+    // Prevent repeated shared-death triggers in a short window
+    private volatile long lastSharedDeathMs = 0L;
 
     /**
      * Create the death listener that records death recaps and triggers cycles.
@@ -55,6 +61,16 @@ public class DeathListener implements Listener {
 
         aliveMap.put(id, false);
 
+        // Mark this player to be moved to the lobby when they respawn (prevents them from being left behind)
+        if (plugin instanceof Main) {
+            try {
+                ((Main) plugin).addPendingLobbyMove(id);
+                plugin.getLogger().info("Marked player " + dead.getName() + " (" + id + ") for pending lobby move on respawn.");
+            } catch (Exception ignored) {
+                plugin.getLogger().warning("Failed to mark pending lobby move for " + id + ": " + ignored.getMessage());
+            }
+        }
+
         Map<String, Object> entry = new HashMap<>();
         entry.put("name", dead.getName());
         entry.put("time", Instant.now().toString());
@@ -83,6 +99,11 @@ public class DeathListener implements Listener {
                     }
                 }
                 if (!anyAlive) {
+                    // If shared-death mode is enabled, the shared-death handler will trigger the cycle.
+                    if (enableSharedDeath) {
+                        plugin.getLogger().info("All players dead, but shared-death is enabled; shared handler will trigger cycle.");
+                        return;
+                    }
                     boolean cycleIfNoPlayers = plugin.getConfig().getBoolean("behavior.cycle_when_no_online_players", true);
                     if (Bukkit.getOnlinePlayers().isEmpty() && !cycleIfNoPlayers) {
                         plugin.getLogger().info("No online players and config prohibits cycling. Skipping.");
@@ -105,15 +126,60 @@ public class DeathListener implements Listener {
     @EventHandler
     public void onAnyPlayerDeath(PlayerDeathEvent event) {
         if (!enableSharedDeath) return;
+        // Rate-limit repeated shared-death triggers to once per 5 seconds
+        long now = System.currentTimeMillis();
+        if (now - lastSharedDeathMs < 5000L) return;
+        if (!sharedDeathInProgress.compareAndSet(false, true)) return;
+        lastSharedDeathMs = now;
         Bukkit.getScheduler().runTask(plugin, () -> {
-            plugin.getLogger().info("A player died — shared-death handler triggered.");
-            for (Player p : Bukkit.getOnlinePlayers()) {
-                try {
-                    p.setHealth(0.0);
-                } catch (Exception ignored) {
+            try {
+                plugin.getLogger().info("A player died — shared-death handler triggered.");
+                // Mark pending lobby move for all players (so dead players get moved on respawn)
+                if (plugin instanceof Main) {
+                    Main m = (Main) plugin;
+                    for (Player p : Bukkit.getOnlinePlayers()) {
+                        try { m.addPendingLobbyMove(p.getUniqueId()); plugin.getLogger().info("Marked player " + p.getName() + " for pending lobby move (shared-death)."); } catch (Exception ignored) { plugin.getLogger().warning("Failed to mark pending move for " + p.getName()); }
+                    }
+                    // Do NOT forcibly kill players here — killing generates many events and can cause recursion/lag.
+                    // Instead, trigger the cycle; players will be moved on respawn (or via pending move handlers).
+                    plugin.getLogger().info("Triggering cycle due to shared-death.");
+                    m.triggerCycle();
                 }
+            } finally {
+                sharedDeathInProgress.set(false);
             }
-            if (plugin instanceof Main) ((Main) plugin).triggerCycle();
         });
+    }
+
+    /**
+     * When a player respawns, mark them alive and apply any pending moves that were queued while they were dead.
+     */
+    @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        Player p = event.getPlayer();
+        // mark alive in the shared map
+        aliveMap.put(p.getUniqueId(), true);
+        if (plugin instanceof Main) {
+            try {
+                ((Main) plugin).handlePlayerRespawn(p);
+            } catch (Exception e) {
+                plugin.getLogger().warning("Error while handling player respawn: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * When a player quits, clear any pending moves so they don't persist unnecessarily.
+     */
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player p = event.getPlayer();
+        if (plugin instanceof Main) {
+            try {
+                ((Main) plugin).clearPendingFor(p.getUniqueId());
+            } catch (Exception e) {
+                plugin.getLogger().warning("Error while clearing pending moves on quit: " + e.getMessage());
+            }
+        }
     }
 }
