@@ -156,8 +156,6 @@ class EnderDragonListenerTest {
         Collection<Player> players = new ArrayList<>();
         players.add(mockPlayer1);
         players.add(mockPlayer2);
-        when(mockPlayer1.getName()).thenReturn("Player1");
-        when(mockPlayer2.getName()).thenReturn("Player2");
 
         try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
             mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn((Collection) players);
@@ -182,7 +180,7 @@ class EnderDragonListenerTest {
         when(mockDragonKiller.getKiller()).thenReturn(mockDragonKiller);
         when(mockDragonKiller.getName()).thenReturn("SoloPlayer");
         when(mockPlugin.getAttemptsSinceLastWin()).thenReturn(3);
-        when(mockPlugin.getTotalWins()).thenReturn(0);
+        // Don't stub getTotalWins if it's not going to be called with empty players
 
         Collection<Player> emptyPlayers = new ArrayList<>();
 
