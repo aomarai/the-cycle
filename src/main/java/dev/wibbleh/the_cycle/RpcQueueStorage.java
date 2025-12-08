@@ -87,22 +87,23 @@ public final class RpcQueueStorage {
     public static void save(File file, List<QueuedRpc> rpcs) {
         if (file == null || rpcs == null) return;
 
-        List<QueuedRpcDto> dtos = new ArrayList<>();
         long now = Instant.now().getEpochSecond();
         
-        for (QueuedRpc rpc : rpcs) {
-            if (rpc == null) continue;
-            // Skip expired RPCs during save (use current timestamp to avoid repeated calls)
-            long age = now - rpc.timestamp;
-            if (age > MAX_AGE_SECONDS) {
-                LOG.info("Skipping expired RPC during save: action=" + rpc.action + " age=" + age + "s");
-                continue;
-            }
+        var dtos = rpcs.stream()
+                .filter(rpc -> rpc != null)
+                .filter(rpc -> {
+                    // Skip expired RPCs during save (use current timestamp to avoid repeated calls)
+                    long age = now - rpc.timestamp;
+                    if (age > MAX_AGE_SECONDS) {
+                        LOG.info("Skipping expired RPC during save: action=" + rpc.action + " age=" + age + "s");
+                        return false;
+                    }
+                    return true;
+                })
+                .map(QueuedRpcDto::fromQueuedRpc)
+                .toList();
 
-            dtos.add(QueuedRpcDto.fromQueuedRpc(rpc));
-        }
-
-        try (FileWriter writer = new FileWriter(file)) {
+        try (var writer = new FileWriter(file)) {
             GSON.toJson(dtos, writer);
             LOG.fine("Persisted " + dtos.size() + " queued RPCs to " + file.getName());
         } catch (Exception e) {
@@ -117,39 +118,43 @@ public final class RpcQueueStorage {
      * @return list of queued RPCs (may be empty if file doesn't exist or is invalid)
      */
     public static List<QueuedRpc> load(File file) {
-        List<QueuedRpc> result = new ArrayList<>();
-        if (file == null || !file.exists()) return result;
+        if (file == null || !file.exists()) return List.of();
 
-        try (FileReader reader = new FileReader(file)) {
+        try (var reader = new FileReader(file)) {
             Type listType = new TypeToken<List<QueuedRpcDto>>(){}.getType();
             List<QueuedRpcDto> dtos = GSON.fromJson(reader, listType);
             
             if (dtos == null) {
                 LOG.warning("RPC queue file is empty or invalid; ignoring.");
-                return result;
+                return List.of();
             }
 
-            for (QueuedRpcDto dto : dtos) {
-                try {
-                    QueuedRpc rpc = dto.toQueuedRpc();
-
-                    // Filter out expired RPCs on load
-                    if (rpc.isExpired()) {
-                        LOG.info("Discarding expired RPC from queue: action=" + rpc.action +
-                                " age=" + (Instant.now().getEpochSecond() - rpc.timestamp) + "s");
-                        continue;
-                    }
-
-                    result.add(rpc);
-                } catch (Exception e) {
-                    LOG.warning("Failed to parse RPC queue entry: " + e.getMessage());
-                }
-            }
+            var result = dtos.stream()
+                    .map(dto -> {
+                        try {
+                            return dto.toQueuedRpc();
+                        } catch (Exception e) {
+                            LOG.warning("Failed to parse RPC queue entry: " + e.getMessage());
+                            return null;
+                        }
+                    })
+                    .filter(rpc -> {
+                        if (rpc == null) return false;
+                        // Filter out expired RPCs on load
+                        if (rpc.isExpired()) {
+                            LOG.info("Discarding expired RPC from queue: action=" + rpc.action +
+                                    " age=" + (Instant.now().getEpochSecond() - rpc.timestamp) + "s");
+                            return false;
+                        }
+                        return true;
+                    })
+                    .toList();
+            
             LOG.info("Loaded " + result.size() + " queued RPCs from " + file.getName());
+            return result;
         } catch (Exception e) {
             LOG.warning("Failed to load RPC queue: " + e.getMessage());
+            return List.of();
         }
-
-        return result;
     }
 }

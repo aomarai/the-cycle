@@ -41,7 +41,7 @@ public class RpcHandler implements PluginMessageListener {
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
         if (!this.rpcChannel.equals(channel)) return;
         if (message == null || message.length == 0) return;
-        try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(message))) {
+        try (var in = new DataInputStream(new ByteArrayInputStream(message))) {
             String payload = in.readUTF();
             if (payload == null || payload.isEmpty()) return;
             // payload format: rpc::<secret>::<action>::<callerUUID>

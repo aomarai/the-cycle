@@ -14,26 +14,30 @@ public final class PendingMovesStorage {
 
     public static void save(File f, Set<UUID> lobby, Set<UUID> hardcore) throws IOException {
         if (f == null) throw new IllegalArgumentException("file is null");
-        File df = f.getParentFile();
+        var df = f.getParentFile();
         if (df != null && !df.exists()) {
             boolean created = df.mkdirs();
             if (!created) throw new IOException("Failed to create directory: " + df.getAbsolutePath());
         }
-        try (BufferedWriter w = new BufferedWriter(new FileWriter(f))) {
-            StringBuilder sb = new StringBuilder();
+        try (var w = new BufferedWriter(new FileWriter(f))) {
+            var sb = new StringBuilder(256); // Pre-allocate reasonable capacity
             sb.append('{');
             sb.append("\"lobby\":[");
             boolean first = true;
             if (lobby != null) {
-                for (UUID u : lobby) {
-                    if (!first) sb.append(','); first = false; sb.append('"').append(u.toString()).append('"');
+                for (var u : lobby) {
+                    if (!first) sb.append(','); 
+                    first = false; 
+                    sb.append('"').append(u.toString()).append('"');
                 }
             }
             sb.append("],\"hardcore\":[");
             first = true;
             if (hardcore != null) {
-                for (UUID u : hardcore) {
-                    if (!first) sb.append(','); first = false; sb.append('"').append(u.toString()).append('"');
+                for (var u : hardcore) {
+                    if (!first) sb.append(','); 
+                    first = false; 
+                    sb.append('"').append(u.toString()).append('"');
                 }
             }
             sb.append("]}");
@@ -44,8 +48,8 @@ public final class PendingMovesStorage {
     public static void load(File f, Set<UUID> lobby, Set<UUID> hardcore) throws IOException {
         if (f == null) throw new IllegalArgumentException("file is null");
         if (!f.exists()) return;
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+        var sb = new StringBuilder();
+        try (var r = new BufferedReader(new FileReader(f))) {
             String line;
             while ((line = r.readLine()) != null) sb.append(line);
         }
@@ -54,26 +58,32 @@ public final class PendingMovesStorage {
         if (hardcore != null) hardcore.clear();
         int li = s.indexOf("\"lobby\":");
         if (li >= 0) {
-            int a = s.indexOf('[', li); int b = s.indexOf(']', a);
+            int a = s.indexOf('[', li); 
+            int b = s.indexOf(']', a);
             if (a >= 0 && b >= 0) {
                 String inner = s.substring(a+1, b).trim();
                 if (!inner.isEmpty()) {
                     for (String part : inner.split(",")) {
                         String q = part.trim().replaceAll("[\" ]", "");
-                        try { if (!q.isEmpty() && lobby != null) lobby.add(UUID.fromString(q)); } catch (Exception ignored) {}
+                        try { 
+                            if (!q.isEmpty() && lobby != null) lobby.add(UUID.fromString(q)); 
+                        } catch (Exception ignored) {}
                     }
                 }
             }
         }
         int hi = s.indexOf("\"hardcore\":");
         if (hi >= 0) {
-            int a = s.indexOf('[', hi); int b = s.indexOf(']', a);
+            int a = s.indexOf('[', hi); 
+            int b = s.indexOf(']', a);
             if (a >= 0 && b >= 0) {
                 String inner = s.substring(a+1, b).trim();
                 if (!inner.isEmpty()) {
                     for (String part : inner.split(",")) {
                         String q = part.trim().replaceAll("[\" ]", "");
-                        try { if (!q.isEmpty() && hardcore != null) hardcore.add(UUID.fromString(q)); } catch (Exception ignored) {}
+                        try { 
+                            if (!q.isEmpty() && hardcore != null) hardcore.add(UUID.fromString(q)); 
+                        } catch (Exception ignored) {}
                     }
                 }
             }

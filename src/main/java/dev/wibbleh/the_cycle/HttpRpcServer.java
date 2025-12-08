@@ -19,16 +19,25 @@ import java.util.logging.Logger;
  * It supports a POST /rpc endpoint that expects a JSON body and an HMAC header 'X-Signature'.
  */
 public class HttpRpcServer {
+    private static final int HTTP_OK = 200;
+    private static final int HTTP_ACCEPTED = 202;
+    private static final int HTTP_BAD_REQUEST = 400;
+    private static final int HTTP_FORBIDDEN = 403;
+    private static final int HTTP_METHOD_NOT_ALLOWED = 405;
+    private static final int HTTP_INTERNAL_ERROR = 500;
+    private static final int RPC_TIMEOUT_SECONDS = 120;
+    private static final int EXECUTOR_THREAD_COUNT = 2;
+    
     private final Main plugin;
     private final HttpServer server;
 
     public HttpRpcServer(Main plugin, int port, String bindAddr) throws IOException {
         this.plugin = plugin;
-        InetSocketAddress addr = bindAddr == null || bindAddr.isEmpty() ? new InetSocketAddress(port) : new InetSocketAddress(bindAddr, port);
+        var addr = bindAddr == null || bindAddr.isEmpty() ? new InetSocketAddress(port) : new InetSocketAddress(bindAddr, port);
         server = HttpServer.create(addr, 0);
         server.createContext("/rpc", new RpcHandler());
         server.createContext("/health", new HealthHandler());
-        server.setExecutor(Executors.newFixedThreadPool(2));
+        server.setExecutor(Executors.newFixedThreadPool(EXECUTOR_THREAD_COUNT));
     }
 
     public void start() { server.start(); }
@@ -38,28 +47,28 @@ public class HttpRpcServer {
     class RpcHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            final Logger safeLogger = plugin.getLogger();
+            final var safeLogger = plugin.getLogger();
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
+                exchange.sendResponseHeaders(HTTP_METHOD_NOT_ALLOWED, -1);
                 return;
             }
-            try (InputStream is = exchange.getRequestBody()) {
+            try (var is = exchange.getRequestBody()) {
                 byte[] data = is.readAllBytes();
                 String payload = new String(data, StandardCharsets.UTF_8);
-                Headers hdr = exchange.getRequestHeaders();
+                var hdr = exchange.getRequestHeaders();
                 String sig = hdr.getFirst("X-Signature");
                 String secret = plugin.getConfig().getString("server.rpc_secret", "");
                 boolean ok = RpcHttpUtil.verifyHmacHex(secret, payload, sig);
                 if (!ok) {
-                    exchange.sendResponseHeaders(403, -1);
+                    exchange.sendResponseHeaders(HTTP_FORBIDDEN, -1);
                     safeLogger.warning("Rejected HTTP RPC with invalid signature.");
                     return;
                 }
                 // Expect a simple JSON like {"action":"cycle-now","caller":"..."}
                 if (payload.contains("\"action\":\"cycle-now\"")) {
                     safeLogger.info("Received HTTP RPC cycle-now; scheduling triggerCycle on main thread and waiting for completion.");
-                    final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-                    final java.util.concurrent.atomic.AtomicReference<Throwable> err = new java.util.concurrent.atomic.AtomicReference<>(null);
+                    final var latch = new java.util.concurrent.CountDownLatch(1);
+                    final var err = new java.util.concurrent.atomic.AtomicReference<Throwable>(null);
                     // Schedule the work on main thread and count down when finished
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         try {
@@ -76,7 +85,7 @@ public class HttpRpcServer {
                     boolean completed = false;
                     try {
                         // Wait longer for large worlds; 120s should be ample for typical cases while avoiding indefinite block.
-                        completed = latch.await(120, java.util.concurrent.TimeUnit.SECONDS);
+                        completed = latch.await(RPC_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                     }
@@ -84,21 +93,21 @@ public class HttpRpcServer {
                     if (!completed) {
                         safeLogger.warning("HTTP RPC cycle-now did not complete within timeout; returning 202.");
                         byte[] out = "ACCEPTED".getBytes(StandardCharsets.UTF_8);
-                        exchange.sendResponseHeaders(202, out.length);
-                        try (OutputStream os = exchange.getResponseBody()) { os.write(out); }
+                        exchange.sendResponseHeaders(HTTP_ACCEPTED, out.length);
+                        try (var os = exchange.getResponseBody()) { os.write(out); }
                         return;
                     }
 
                     if (err.get() != null) {
                         safeLogger.warning("HTTP RPC cycle-now completed with error: " + err.get().getMessage());
-                        exchange.sendResponseHeaders(500, -1);
+                        exchange.sendResponseHeaders(HTTP_INTERNAL_ERROR, -1);
                         return;
                     }
 
                     // Completed successfully
                     byte[] out = "OK".getBytes(StandardCharsets.UTF_8);
-                    exchange.sendResponseHeaders(200, out.length);
-                    try (OutputStream os = exchange.getResponseBody()) { os.write(out); }
+                    exchange.sendResponseHeaders(HTTP_OK, out.length);
+                    try (var os = exchange.getResponseBody()) { os.write(out); }
                     return;
                 }
 
@@ -115,8 +124,8 @@ public class HttpRpcServer {
                         }
                     });
                     byte[] out = "OK".getBytes(StandardCharsets.UTF_8);
-                    exchange.sendResponseHeaders(200, out.length);
-                    try (OutputStream os = exchange.getResponseBody()) { os.write(out); }
+                    exchange.sendResponseHeaders(HTTP_OK, out.length);
+                    try (var os = exchange.getResponseBody()) { os.write(out); }
                     return;
                 }
 
@@ -130,7 +139,7 @@ public class HttpRpcServer {
                                 safeLogger.warning("move-players received but hardcore server name is not configured.");
                                 return;
                             }
-                            for (org.bukkit.entity.Player p : Bukkit.getOnlinePlayers()) {
+                            for (var p : Bukkit.getOnlinePlayers()) {
                                 try {
                                     plugin.sendPlayerToServer(p, target);
                                 } catch (Exception ex) {
@@ -142,15 +151,15 @@ public class HttpRpcServer {
                         }
                     });
                     byte[] out = "OK".getBytes(StandardCharsets.UTF_8);
-                    exchange.sendResponseHeaders(200, out.length);
-                    try (OutputStream os = exchange.getResponseBody()) { os.write(out); }
+                    exchange.sendResponseHeaders(HTTP_OK, out.length);
+                    try (var os = exchange.getResponseBody()) { os.write(out); }
                     return;
                 }
 
-                exchange.sendResponseHeaders(400, -1);
+                exchange.sendResponseHeaders(HTTP_BAD_REQUEST, -1);
             } catch (Exception e) {
                 safeLogger.warning("Failed to handle HTTP RPC: " + e.getMessage());
-                exchange.sendResponseHeaders(500, -1);
+                exchange.sendResponseHeaders(HTTP_INTERNAL_ERROR, -1);
             }
         }
     }
@@ -159,7 +168,7 @@ public class HttpRpcServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
+                exchange.sendResponseHeaders(HTTP_METHOD_NOT_ALLOWED, -1);
                 return;
             }
 
@@ -175,13 +184,13 @@ public class HttpRpcServer {
 
                 byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, responseBytes.length);
-                try (OutputStream os = exchange.getResponseBody()) {
+                exchange.sendResponseHeaders(HTTP_OK, responseBytes.length);
+                try (var os = exchange.getResponseBody()) {
                     os.write(responseBytes);
                 }
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to handle health check: " + e.getMessage());
-                exchange.sendResponseHeaders(500, -1);
+                exchange.sendResponseHeaders(HTTP_INTERNAL_ERROR, -1);
             }
         }
     }
