@@ -88,9 +88,13 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                     if (plugin instanceof Main m) {
                         m.setCycleNumber(n);
                     }
-                    sender.sendMessage("Cycle number set to " + n);
+                    if (sender != null) {
+                        sender.sendMessage("Cycle number set to " + n);
+                    }
                 } catch (NumberFormatException ex) {
-                    sender.sendMessage("Invalid number.");
+                    if (sender != null) {
+                        sender.sendMessage("Invalid number.");
+                    }
                 }
                 return true;
             }
@@ -103,20 +107,26 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                     }
                     if (m.isHardcoreBackend()) {
                         m.triggerCycle();
-                        sender.sendMessage("Cycling world now (executed on this hardcore backend).");
+                        if (sender != null) {
+                            sender.sendMessage("Cycling world now (executed on this hardcore backend).");
+                        }
                     } else {
                         boolean forwarded = m.sendRpcToHardcore("cycle-now", sender);
-                        if (forwarded) {
-                            // Keep the original single-line response expected by unit tests.
-                            sender.sendMessage("Cycle request forwarded to hardcore backend.");
-                            // Informational log: world-ready notifications will move players when available.
-                            Logger.getLogger("HardcoreCycle").info("RPC forwarded to hardcore; lobby will move players when the hardcore server notifies world-ready.");
-                        } else {
-                            sender.sendMessage("Failed to forward cycle request; run /cycle on your hardcore backend.");
+                        if (sender != null) {
+                            if (forwarded) {
+                                // Keep the original single-line response expected by unit tests.
+                                sender.sendMessage("Cycle request forwarded to hardcore backend.");
+                                // Informational log: world-ready notifications will move players when available.
+                                Logger.getLogger("HardcoreCycle").info("RPC forwarded to hardcore; lobby will move players when the hardcore server notifies world-ready.");
+                            } else {
+                                sender.sendMessage("Failed to forward cycle request; run /cycle on your hardcore backend.");
+                            }
                         }
                     }
                 } else {
-                    sender.sendMessage("Cycling world now.");
+                    if (sender != null) {
+                        sender.sendMessage("Cycling world now.");
+                    }
                 }
                 return true;
             }
