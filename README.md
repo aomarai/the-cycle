@@ -1,285 +1,75 @@
-# The Cycle - Hardcore Minecraft Plugin
+# HardcoreCycle Plugin
 
-[![Java CI with Maven](https://github.com/aomarai/the-cycle/actions/workflows/maven-test.yml/badge.svg)](https://github.com/aomarai/the-cycle/actions/workflows/maven-test.yml)
-[![codecov](https://codecov.io/gh/aomarai/the-cycle/branch/main/graph/badge.svg)](https://codecov.io/gh/aomarai/the-cycle)
+This plugin manages cyclical hardcore worlds: it creates a new world for each cycle, moves players between a small always-on lobby server and the hardcore server, and optionally deletes old worlds. It supports forwarding RPCs between a lobby and hardcore backend using either BungeeCord plugin messaging or HTTP calls.
 
-A Minecraft server plugin that manages hardcore world cycling by generating fresh worlds, safely moving players to a lobby during generation, and returning them when ready.
+## Quick install
 
-## Features
+1. Build the plugin with Maven:
 
-- **Automatic World Cycling** - Triggers new world generation on player death
-- **Safe Player Management** - Moves players to lobby during world generation
-- **Dragon Tracking** - Tracks ender dragon kills and attempts between victories
-- **Statistics Display** - Scoreboard shows cycle number, attempts, and total wins
-- **Dramatic Titles** - Large title screens for cycle starts and dragon defeats
-- **Mid-Cycle Protection** - Players joining during active cycles wait in lobby
-- **Auto-Start Cycles** - Configurable automatic cycle initiation when players join
-- **Dual RPC System** - BungeeCord plugin messaging + HTTP fallback
-- **Persistent Queue** - Failed RPCs survive server restarts
-- **Health Monitoring** - HTTP endpoint for status checks
+```bash
+mvn clean package
+```
 
-## Quick Start
+2. Copy `target/the-cycle-1.0.0.jar` to the `plugins/` folder of both your lobby and hardcore servers.
 
-### Installation
+3. Configure your `config.yml` (see below).
 
-1. Download `the-cycle-1.0.0.jar`
-2. Copy to the `plugins/` folder on **both** lobby and hardcore servers
-3. Restart both servers
-4. Configure `plugins/TheCycle/config.yml` on each server
-5. Set `server.role` to either `lobby` or `hardcore`
+4. If using BungeeCord/Velocity, register both servers in your proxy and ensure `BungeeCord` plugin messaging is enabled.
 
-### Why Install on Both Servers?
-
-- **Hardcore Server** (`role: hardcore`) - Creates/deletes worlds, manages game state
-- **Lobby Server** (`role: lobby`) - Forwards cycle requests, manages player transfers
+5. Start the lobby and hardcore servers.
 
 ## Configuration
 
-### Basic Configuration
+All configuration options live in `plugins/HardcoreCycle/config.yml` (created from the default bundled config). Key values:
 
-Edit `plugins/TheCycle/config.yml`:
+- `server.role`: `hardcore` or `lobby`. The hardcore instance creates/deletes worlds.
+- `server.hardcore`: (on lobby) your proxy name for the hardcore server.
+- `server.rpc_secret`: shared HMAC secret used for HTTP RPCs.
+- `server.http_enabled`: whether to start an embedded HTTP receiver for RPCs.
+- `server.http_port` and `server.http_bind`: bind settings for the embedded HTTP server.
+- `server.hardcore_http_url`: (optional) full URL to post RPCs to the hardcore backend.
+- `server.lobby_http_url`: (optional) full URL to post world-ready notifications to the lobby.
+- `server.randomize_seed` (default `true`): when `true`, each new hardcore world receives a new random seed.
+- `server.seed` (default `0`): if `randomize_seed` is `false` and this is non-zero, the configured seed will be used for world creation.
+- `lobby.server` and `lobby.world`: where to send players when the hardcore world is unavailable.
 
-```yaml
-server:
-  role: "lobby"                 # "lobby" or "hardcore"
-  hardcore: "hardcore"          # Proxy server name for hardcore
-  rpc_secret: "your-secret"     # Shared secret for RPC authentication
-  http_enabled: true            # Enable HTTP RPC server
-  http_port: 8080
-  http_bind: "0.0.0.0"
-  hardcore_http_url: "http://hardcore-ip:8080/rpc"  # For lobby
-  lobby_http_url: "http://lobby-ip:8080/rpc"        # For hardcore
+### Safety
+- World deletion is constrained to the server's world folder; the plugin will not delete paths outside the server directory.
+- Deletion can be asynchronous or deferred until restart. See `behavior.defer_delete_until_restart` and `behavior.async_delete`.
 
-behavior:
-  delete_previous_worlds: true
-  defer_delete_until_restart: false
-  async_delete: true
-  shared_death: true             # One death triggers cycle for all
-  countdown_send_to_lobby_seconds: 10
-  countdown_send_to_hardcore_seconds: 10
-  countdown_broadcast_to_all: true
-  delay_before_generation_seconds: 3
-  wait_for_players_to_leave_seconds: 30
-  auto_start_cycles: true        # Auto-start when players join lobby
+## Usage
 
-features:
-  scoreboard: true               # Display cycle stats
-  actionbar: true
+- `/cycle` or `/cycle cycle-now` — Trigger a new cycle. On lobby instances this forwards the request to the hardcore backend.
 
-webhook:
-  url: ""                        # Optional Discord webhook URL
-```
+Behavior: when a cycle is triggered the plugin will move players to the lobby, wait for them to leave the hardcore world, then generate a new world and move players back.
 
-### Key Configuration Notes
+## BungeeCord notes
 
-- **server.role** - Set to `hardcore` on the backend server, `lobby` on the fallback server
-- **server.hardcore** - Must match the server name in your proxy config (BungeeCord/Velocity)
-- **rpc_secret** - Must be identical on both servers; used for HMAC authentication
-- **http_enabled** - Recommended when servers are on different machines
-- **auto_start_cycles** - Set to `false` for manual cycle control
+- The plugin prefers HTTP RPC forwarding if `server.hardcore_http_url` is configured. HTTP does not require a player to send messages.
+- If HTTP is not configured, the plugin falls back to Bungee plugin messaging which requires an online player to send the plugin message through.
 
-## Configuration Examples
+## Ports and resources
 
-### Lobby Server (HTTP-based)
+- Default embedded HTTP port: `8080`. Configure with `server.http_port`.
+- Lobby server memory recommendation (6-8 players): 512MB - 1GB (since it's mostly proxy/hub duties).
+- Hardcore server memory recommendation (6-8 players, world generation): 2GB - 4GB depending on view-distance and plugins.
 
-```yaml
-server:
-  role: "lobby"
-  hardcore: "hardcore"
-  rpc_secret: "bighardcoreworld"
-  http_enabled: true
-  http_port: 8080
-  hardcore_http_url: "http://10.0.0.2:8080/rpc"
+## Persistence
 
-lobby:
-  server: ""
-  world: "Lobby"
-```
-
-### Hardcore Server
-
-```yaml
-server:
-  role: "hardcore"
-  rpc_secret: "bighardcoreworld"
-  http_enabled: true
-  http_port: 8080
-  lobby_http_url: "http://10.0.0.3:8080/rpc"
-
-behavior:
-  countdown_send_to_lobby_seconds: 8
-  delay_before_generation_seconds: 3
-  wait_for_players_to_leave_seconds: 30
-```
-
-## Commands
-
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/cycle cycle-now` | Request immediate world cycle | `thecycle.cycle` |
-| `/cycle setcycle <n>` | Set the current cycle number | `thecycle.cycle` |
-| `/cycle status` | Display current cycle and player counts | None |
-
-## How It Works
-
-1. **Cycle Triggered** - Player death or `/cycle cycle-now` command
-2. **Players Moved** - Active players teleported to lobby with countdown
-3. **World Cleared** - Plugin waits for players to leave (configurable timeout)
-4. **World Generated** - New world created on main thread
-5. **Notification Sent** - Hardcore notifies lobby that world is ready
-6. **Players Returned** - Lobby moves players to new hardcore world
-7. **Old World Deleted** - Previous world deleted (async or deferred)
-
-## Proxy Setup (BungeeCord/Velocity)
-
-- Enable `ip_forward` in your proxy configuration
-- Ensure server names in proxy config match `server.hardcore` and `server.lobby` settings
-- Plugin uses BungeeCord plugin messaging channel for RPC forwarding
-- HTTP RPC serves as fallback when plugin messaging is unavailable
-
-## HTTP RPC
-
-### Endpoints
-
-**POST /rpc** - RPC endpoint for inter-server communication
-- Requires `X-Signature` header with HMAC-SHA256 authentication
-- Used for cycle requests and world-ready notifications
-
-**GET /health** - Health check endpoint
-```json
-{
-  "status": "ok",
-  "role": "hardcore",
-  "cycleNumber": 42,
-  "playersOnline": 6
-}
-```
-
-### Use Cases for Health Endpoint
-
-- Monitor server health from external tools (Prometheus, Nagios, etc.)
-- Verify RPC connectivity before operations
-- Build status dashboards
-- Troubleshoot connection issues
-
-### Reliability Features
-
-1. **Automatic Retry** - HTTP RPC uses exponential backoff with jitter (up to 3 attempts)
-2. **Persistent Queue** - Failed RPCs saved to `failed_rpcs.json` and retried every 60 seconds
-3. **Message Expiry** - Messages older than 24 hours automatically cleaned up
-4. **Configuration Validation** - Invalid configs caught on startup with detailed error messages
-
-## Server Requirements
-
-### Recommended Resources (6-8 players)
-
-- **Lobby Server**: 512 MB - 1 GB RAM (lightweight, always-on)
-- **Hardcore Server**: 2-3 GB RAM (world generation, chunk loading)
-
-### Ports
-
-- **Minecraft**: Default 25565 (proxy) 
-- **Backend Servers**: 25566 (lobby), 25567 (hardcore) - or configure as needed
-- **HTTP RPC**: 8080 (configurable)
-
-## Troubleshooting
-
-### Players Not Moving to Lobby
-
-**Check:**
-- `lobby.server` matches proxy server name
-- Proxy has `ip_forward` enabled
-- Plugin channel registration (check logs for warnings)
-- HTTP RPC fallback configured if plugin messaging fails
-
-**Test:**
-```bash
-curl http://hardcore-server:8080/health
-# Should return JSON status
-```
-
-### Lobby Doesn't Trigger Hardcore Cycle
-
-**Check:**
-- HTTP RPC endpoint enabled and reachable on hardcore server
-- `rpc_secret` matches on both servers
-- Firewall allows traffic on HTTP port
-- Review logs for RPC retry attempts
-
-**Test health endpoint:**
-```bash
-curl http://hardcore-server:8080/health
-```
-
-### World Generation Fails or Stalls
-
-**Possible causes:**
-- Insufficient CPU or memory
-- Players didn't leave world before timeout
-- Heavy chunk processing
-
-**Solutions:**
-- Increase `wait_for_players_to_leave_seconds`
-- Allocate more RAM to hardcore server
-- Check server logs for errors
-
-### Configuration Errors on Startup
-
-The plugin validates configuration and logs detailed errors. Common issues:
-- Invalid URLs (must start with `http://` or `https://`)
-- Missing required fields for server role
-- Invalid port numbers (must be 1-65535)
-- Empty or short RPC secrets (warning only)
-
-Fix reported issues and restart the server.
-
-### HTTP RPC Failures
-
-**Check logs for:**
-- Retry attempts with exponential backoff
-- Failed RPC queue persistence
-- Network connectivity issues
-
-**Verify:**
-- Firewall rules allow traffic on HTTP port
-- URLs are correct in configuration
-- Health endpoint responds: `curl http://server:8080/health`
+- Pending player moves and persistent RPC queue are stored under the plugin data folder (`plugins/HardcoreCycle`). They survive restarts.
 
 ## Development
 
-### Building from Source
-
-```bash
-# Prerequisites: Java 21, Maven 3.6+
-git clone https://github.com/aomarai/the-cycle.git
-cd the-cycle
-mvn clean package
-
-# Output: target/the-cycle-1.0.0.jar
-```
-
-### Running Tests
+- Run unit tests:
 
 ```bash
 mvn test
-# All 121+ tests should pass
 ```
 
-### Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, code style, testing requirements, and pull request process.
-
-## License
-
-This plugin is provided as-is for use and modification. See repository for details.
+If you use a Maven wrapper, run `./mvnw test` (or `mvnw.cmd` on Windows).
 
 ## Support
 
-For issues, configuration help, or bug reports:
-1. Check this README and troubleshooting section
-2. Review server logs for error messages
-3. Open an issue on GitHub with:
-   - Server version (Java, Paper, plugin)
-   - Configuration file
-   - Relevant log excerpts
-   - Steps to reproduce
+If you see failed world generation with `WorldInitEvent may only be triggered synchronously`, ensure the plugin defers generation to the main server thread (this plugin schedules generation on the server thread).
+
+

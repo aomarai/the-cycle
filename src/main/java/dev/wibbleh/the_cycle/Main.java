@@ -16,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.*;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
@@ -98,6 +99,10 @@ public class Main extends JavaPlugin implements Listener {
     // Countdown durations (seconds) for moving players
     private int countdownSendToLobbySeconds = 10;
     private int countdownSendToHardcoreSeconds = 10;
+    // Seed configuration: when true, a new random seed will be used for each generated hardcore world
+    private boolean randomizeSeed = true;
+    // Optional configured seed (only used when randomizeSeed is false and non-zero)
+    private long configuredSeed = 0L;
     // Delay (seconds) to wait before starting world generation (configurable)
     private int delayBeforeGenerationSeconds = 3;
     // Maximum seconds to wait for players to leave the previous hardcore world before forcing generation
@@ -199,6 +204,9 @@ public class Main extends JavaPlugin implements Listener {
         countdownSendToLobbySeconds = cfg.getInt("behavior.countdown_send_to_lobby_seconds", 10);
         countdownSendToHardcoreSeconds = cfg.getInt("behavior.countdown_send_to_hardcore_seconds", 10);
         countdownBroadcastToAll = cfg.getBoolean("behavior.countdown_broadcast_to_all", true);
+        // Seed config: default to random seed per-cycle unless configured otherwise
+        randomizeSeed = cfg.getBoolean("server.randomize_seed", true);
+        configuredSeed = cfg.getLong("server.seed", 0L);
         // Delay and wait settings for safe generation
         delayBeforeGenerationSeconds = cfg.getInt("behavior.delay_before_generation_seconds", 3);
         waitForPlayersToLeaveSeconds = cfg.getInt("behavior.wait_for_players_to_leave_seconds", 30);
@@ -432,7 +440,15 @@ public class Main extends JavaPlugin implements Listener {
 
         World newWorld = null;
         try {
-            newWorld = Bukkit.createWorld(new org.bukkit.WorldCreator(newWorldName));
+            // Build WorldCreator and apply seed strategy using SeedUtil
+            org.bukkit.WorldCreator wc = new org.bukkit.WorldCreator(newWorldName);
+            java.util.OptionalLong maybeSeed = SeedUtil.selectSeed(randomizeSeed, configuredSeed);
+            if (maybeSeed.isPresent()) {
+                long seed = maybeSeed.getAsLong();
+                wc.seed(seed);
+                LOG.info("Using seed " + seed + " for world " + newWorldName);
+            }
+            newWorld = Bukkit.createWorld(wc);
         } catch (Exception e) {
             LOG.warning("Failed to create new world '" + newWorldName + "': " + e.getMessage());
         }
