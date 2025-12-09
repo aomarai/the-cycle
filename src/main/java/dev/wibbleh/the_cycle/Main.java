@@ -113,6 +113,8 @@ public class Main extends JavaPlugin implements Listener {
     private boolean countdownBroadcastToAll = true;
     // Path to server.properties file (configurable, default is "server.properties" in current directory)
     private java.nio.file.Path serverPropertiesPath = java.nio.file.Paths.get("server.properties");
+    // When true, restart the server after updating server.properties (ensures proper world loading)
+    private boolean restartOnCycle = true;
     // Optional UUID of the player who requested the last cycle; used to scope countdown messages when configured
     private volatile UUID lastCycleRequester = null;
     // Pending moves for players who are dead at move time; they will be moved on respawn
@@ -213,6 +215,8 @@ public class Main extends JavaPlugin implements Listener {
         delayBeforeGenerationSeconds = cfg.getInt("behavior.delay_before_generation_seconds", 3);
         waitForPlayersToLeaveSeconds = cfg.getInt("behavior.wait_for_players_to_leave_seconds", 30);
         preGenerationCountdownEnabled = cfg.getBoolean("behavior.pre_generation_countdown_enabled", true);
+        // Restart on cycle configuration
+        restartOnCycle = cfg.getBoolean("behavior.restart_on_cycle", true);
         // Server properties path configuration (relative to server root directory)
         String serverPropsPath = cfg.getString("server.properties_path", "server.properties");
         serverPropertiesPath = java.nio.file.Paths.get(serverPropsPath);
@@ -269,6 +273,19 @@ public class Main extends JavaPlugin implements Listener {
 
         String roleLabel = isHardcoreBackend ? "hardcore" : "lobby";
         LOG.info("TheCyclePlugin enabled — cycle #" + cycleNumber.get() + "; role=" + roleLabel + ", bungeeRegistered=" + registeredBungeeChannel);
+        
+        // If this is a hardcore backend that just started, check if we should notify the lobby
+        // This happens when the server was restarted after a cycle to load the new world
+        if (isHardcoreBackend && restartOnCycle) {
+            // Schedule notification to lobby after a short delay to ensure server is fully ready
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                try {
+                    notifyLobbyWorldReady(cycleNumber.get());
+                } catch (Exception e) {
+                    LOG.warning("Failed to notify lobby on startup: " + e.getMessage());
+                }
+            }, 100L); // 5 seconds delay
+        }
     }
 
     /**
@@ -423,18 +440,69 @@ public class Main extends JavaPlugin implements Listener {
         String newWorldName = "hardcore_cycle_" + next;
         LOG.info("Generating world: " + newWorldName);
         
-        // Update server.properties to set level-name to the new world name
+        // Calculate seed if randomization is enabled
+        java.util.OptionalLong maybeSeed = SeedUtil.selectSeed(randomizeSeed, configuredSeed);
+        String seedStr = "";
+        if (maybeSeed.isPresent()) {
+            seedStr = String.valueOf(maybeSeed.getAsLong());
+            LOG.info("Will use seed " + seedStr + " for world " + newWorldName);
+        }
+        
+        // Update server.properties to set level-name and level-seed
         // This ensures the correct world is loaded on server restart
         try {
-            boolean updated = ServerPropertiesUtil.updateLevelName(serverPropertiesPath, newWorldName);
+            boolean updated = ServerPropertiesUtil.updateLevelNameAndSeed(serverPropertiesPath, newWorldName, seedStr.isEmpty() ? null : seedStr);
             if (updated) {
-                LOG.info("Updated server.properties level-name to: " + newWorldName);
+                LOG.info("Updated server.properties: level-name=" + newWorldName + (seedStr.isEmpty() ? "" : ", level-seed=" + seedStr));
             } else {
-                LOG.warning("Failed to update server.properties level-name; server restart may load wrong world.");
+                LOG.warning("Failed to update server.properties; server restart may load wrong world.");
             }
         } catch (Exception e) {
             LOG.warning("Error updating server.properties: " + e.getMessage() + "; server restart may load wrong world.");
         }
+        
+        // If restart_on_cycle is enabled, restart the server instead of creating world in-memory
+        if (restartOnCycle) {
+            LOG.info("Restart-on-cycle is enabled. Server will restart to load new world: " + newWorldName);
+            
+            // Show notification to players
+            Component title = Component.text("SERVER RESTARTING", NamedTextColor.GOLD);
+            Component subtitle = Component.text("New cycle world will be ready soon...", NamedTextColor.YELLOW);
+            Title titleScreen = Title.title(
+                title,
+                subtitle,
+                Title.Times.times(
+                    Duration.ofMillis(500),
+                    Duration.ofSeconds(3),
+                    Duration.ofSeconds(1)
+                )
+            );
+            
+            Bukkit.getOnlinePlayers().forEach(p -> {
+                try {
+                    p.showTitle(titleScreen);
+                    p.sendMessage("§6[HardcoreCycle] Server restarting to load cycle " + next + "...");
+                } catch (Exception ignored) {}
+            });
+            
+            // Schedule deletion of previous world before restart
+            if (next > 1 && cfg.getBoolean("behavior.delete_previous_worlds", true)) {
+                String prevWorldName = "hardcore_cycle_" + (next - 1);
+                worldDeletionService.scheduleDeleteWorldFolder(prevWorldName);
+            }
+            
+            // Schedule server restart after a short delay to allow players to see the message
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                LOG.info("Initiating server restart for new world generation...");
+                // Restart the server - this works with most server management scripts (like start.sh with restart loop)
+                Bukkit.getServer().shutdown();
+            }, 60L); // 3 seconds delay
+            
+            return;
+        }
+        
+        // Legacy mode: create world in-memory (may not work correctly if default world was deleted)
+        LOG.info("Creating world in-memory (legacy mode). For best reliability, enable restart_on_cycle in config.");
         
         // Show title to all online players indicating new cycle is starting
         Component title = Component.text("CYCLE " + next, NamedTextColor.GREEN);
@@ -460,7 +528,6 @@ public class Main extends JavaPlugin implements Listener {
         try {
             // Build WorldCreator and apply seed strategy using SeedUtil
             org.bukkit.WorldCreator wc = new org.bukkit.WorldCreator(newWorldName);
-            java.util.OptionalLong maybeSeed = SeedUtil.selectSeed(randomizeSeed, configuredSeed);
             if (maybeSeed.isPresent()) {
                 long seed = maybeSeed.getAsLong();
                 wc.seed(seed);

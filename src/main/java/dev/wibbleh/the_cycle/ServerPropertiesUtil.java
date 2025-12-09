@@ -36,8 +36,29 @@ public final class ServerPropertiesUtil {
      * @return true if the update was successful, false otherwise
      */
     public static boolean updateLevelName(Path serverPropertiesPath, String worldName) {
+        return updateLevelNameAndSeed(serverPropertiesPath, worldName, null);
+    }
+
+    /**
+     * Update the level-name and optionally level-seed properties in server.properties.
+     * <p>
+     * This method:
+     * 1. Reads the current server.properties file
+     * 2. Updates the level-name and level-seed properties
+     * 3. Creates a backup of the original file
+     * 4. Writes the updated properties back to the file
+     * <p>
+     * The method preserves all other properties and their values. If the file doesn't exist,
+     * it will be created with minimal default properties.
+     *
+     * @param serverPropertiesPath path to the server.properties file
+     * @param worldName the new world name to set for level-name
+     * @param seed the seed to set for level-seed (null to leave unchanged, empty string to clear)
+     * @return true if the update was successful, false otherwise
+     */
+    public static boolean updateLevelNameAndSeed(Path serverPropertiesPath, String worldName, String seed) {
         if (serverPropertiesPath == null || worldName == null || worldName.trim().isEmpty()) {
-            LOG.warning("Invalid parameters for updateLevelName: path=" + serverPropertiesPath + ", worldName=" + worldName);
+            LOG.warning("Invalid parameters for updateLevelNameAndSeed: path=" + serverPropertiesPath + ", worldName=" + worldName);
             return false;
         }
 
@@ -51,6 +72,9 @@ public final class ServerPropertiesUtil {
                     writer.write("# Minecraft server properties\n");
                     writer.write("# Updated by HardcoreCycle plugin\n");
                     writer.write("level-name=" + worldName + "\n");
+                    if (seed != null) {
+                        writer.write("level-seed=" + seed + "\n");
+                    }
                 }
                 return true;
             }
@@ -60,9 +84,10 @@ public final class ServerPropertiesUtil {
             Files.copy(serverPropertiesPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
             LOG.fine("Created backup at: " + backupPath);
 
-            // Read file line by line, updating level-name if found
+            // Read file line by line, updating level-name and level-seed if found
             var lines = new ArrayList<String>();
             boolean levelNameFound = false;
+            boolean levelSeedFound = false;
             
             try (var reader = Files.newBufferedReader(serverPropertiesPath, StandardCharsets.UTF_8)) {
                 String line;
@@ -73,6 +98,9 @@ public final class ServerPropertiesUtil {
                     if (!levelNameFound && !trimmed.startsWith("#") && trimmed.startsWith("level-name=")) {
                         lines.add("level-name=" + worldName);
                         levelNameFound = true;
+                    } else if (seed != null && !levelSeedFound && !trimmed.startsWith("#") && trimmed.startsWith("level-seed=")) {
+                        lines.add("level-seed=" + seed);
+                        levelSeedFound = true;
                     } else {
                         lines.add(line);
                     }
@@ -85,13 +113,19 @@ public final class ServerPropertiesUtil {
                 LOG.info("Added level-name property to server.properties");
             }
             
+            // If level-seed update was requested and not found, add it
+            if (seed != null && !levelSeedFound) {
+                lines.add("level-seed=" + seed);
+                LOG.info("Added level-seed property to server.properties");
+            }
+            
             // Write the updated lines back to the file
             Files.write(serverPropertiesPath, lines, StandardCharsets.UTF_8);
-            LOG.info("Updated server.properties: level-name=" + worldName);
+            LOG.info("Updated server.properties: level-name=" + worldName + (seed != null ? ", level-seed=" + seed : ""));
             return true;
             
         } catch (IOException e) {
-            LOG.warning("Failed to update server.properties level-name: " + e.getMessage());
+            LOG.warning("Failed to update server.properties: " + e.getMessage());
             return false;
         } catch (Exception e) {
             LOG.warning("Unexpected error updating server.properties: " + e.getMessage());

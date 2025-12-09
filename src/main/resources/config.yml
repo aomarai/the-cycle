@@ -16,6 +16,13 @@ behavior:
   # When true, the lobby will automatically request a new cycle from the hardcore server
   # when players are waiting and no cycle is active. Default: true
   auto_start_cycles: true
+  # Restart server after updating server.properties for new cycle (hardcore server only).
+  # When true, the server will restart after updating server.properties to ensure
+  # the new world is properly loaded as the main world. This is the recommended approach
+  # for reliable world cycling. When false, the plugin attempts to create worlds in-memory
+  # which may not work correctly after deleting the default world.
+  # Default: true
+  restart_on_cycle: true
 
 # Server role controls whether this instance is responsible for creating/deleting worlds.
 # Values: "hardcore" (the backend that hosts the cyclical hardcore worlds) or "lobby"

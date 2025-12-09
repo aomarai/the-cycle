@@ -31,28 +31,52 @@ All configuration options live in `plugins/HardcoreCycle/config.yml` (created fr
 - `server.lobby_http_url`: (optional) full URL to post world-ready notifications to the lobby.
 - `server.randomize_seed` (default `true`): when `true`, each new hardcore world receives a new random seed.
 - `server.seed` (default `0`): if `randomize_seed` is `false` and this is non-zero, the configured seed will be used for world creation.
-- `server.properties_path` (default `"server.properties"`): path to the server.properties file. The plugin automatically updates the `level-name` property to ensure the correct cycle world is loaded on server restart.
+- `server.properties_path` (default `"server.properties"`): path to the server.properties file. The plugin automatically updates the `level-name` and `level-seed` properties.
+- `behavior.restart_on_cycle` (default `true`): when `true`, the server restarts after each cycle to properly load the new world. **Recommended for reliable world cycling.**
 - `lobby.server` and `lobby.world`: where to send players when the hardcore world is unavailable.
 
-### Important: Server Properties Integration
+### Important: Server Restart Behavior
 
-The plugin automatically updates your `server.properties` file to set `level-name` to the current cycle world (e.g., `hardcore_cycle_1`, `hardcore_cycle_2`, etc.). This ensures:
-- Each server restart loads the correct cycle world
-- New random seeds are properly applied to new worlds
-- Old cycle worlds are properly replaced
+**NEW:** By default (`behavior.restart_on_cycle: true`), the plugin now restarts the hardcore server after each cycle. This ensures:
+- The new world is properly loaded as Minecraft's main world
+- Random seeds are correctly applied
+- World generation is reliable even when the default world has been deleted
+- Players are automatically moved back to the hardcore server after it restarts
 
-**Note:** If you manually set `level-name=default_world` in `server.properties`, the same world will be reused. The plugin automatically manages this setting for you.
+**How it works:**
+1. Cycle is triggered (via `/cycle` command)
+2. Players are moved to the lobby server
+3. `server.properties` is updated with the new world name and seed
+4. Hardcore server restarts
+5. On startup, Minecraft generates/loads the new world as the main world
+6. Lobby server is notified that the world is ready
+7. Players are automatically moved back to the hardcore server
+
+**Legacy mode** (`behavior.restart_on_cycle: false`): The server attempts to create worlds in-memory without restarting. This may not work correctly if the default world has been deleted.
+
+### Server Properties Integration
+
+The plugin automatically updates your `server.properties` file to set:
+- `level-name` to the current cycle world (e.g., `hardcore_cycle_1`, `hardcore_cycle_2`)
+- `level-seed` to the generated random seed (when `randomize_seed: true`)
+
+A backup (`server.properties.backup`) is created before each modification.
 
 ### Safety
 - World deletion is constrained to the server's world folder; the plugin will not delete paths outside the server directory.
 - Deletion can be asynchronous or deferred until restart. See `behavior.defer_delete_until_restart` and `behavior.async_delete`.
-- The plugin creates a backup (`server.properties.backup`) before modifying your `server.properties` file.
+- Server restarts are graceful with player notifications.
 
 ## Usage
 
 - `/cycle` or `/cycle cycle-now` — Trigger a new cycle. On lobby instances this forwards the request to the hardcore backend.
 
-Behavior: when a cycle is triggered the plugin will move players to the lobby, wait for them to leave the hardcore world, then generate a new world and move players back.
+Behavior (with `restart_on_cycle: true`):
+1. Players are moved to the lobby server
+2. `server.properties` is updated
+3. Hardcore server restarts
+4. New world is generated on restart
+5. Players are automatically moved back to hardcore
 
 ## BungeeCord notes
 
