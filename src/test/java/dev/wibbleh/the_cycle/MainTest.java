@@ -512,5 +512,199 @@ class MainTest {
         assertEquals("stats.txt", statsFile.getName(), "Stats file should be named stats.txt");
         assertFalse(statsFile.getName().equals("stats.json"), "Stats file should not be named stats.json");
     }
+
+    @Test
+    void testShowWorldCycleCompleteTitle() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer1 = mock(org.bukkit.entity.Player.class);
+        org.bukkit.entity.Player mockPlayer2 = mock(org.bukkit.entity.Player.class);
+        
+        lenient().when(mockPlayer1.getName()).thenReturn("Player1");
+        lenient().when(mockPlayer2.getName()).thenReturn("Player2");
+        
+        // Setup logger
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        
+        // Access the private method
+        Method showTitleMethod = Main.class.getDeclaredMethod("showWorldCycleCompleteTitle", int.class);
+        showTitleMethod.setAccessible(true);
+        
+        // Mock Bukkit.getOnlinePlayers() to return our mock players
+        try (MockedStatic<Bukkit> bukkitMock = mockStatic(Bukkit.class)) {
+            bukkitMock.when(Bukkit::getOnlinePlayers).thenReturn(Arrays.asList(mockPlayer1, mockPlayer2));
+            
+            // Invoke the method
+            showTitleMethod.invoke(plugin, 42);
+            
+            // Verify showTitle was called on both players
+            verify(mockPlayer1, times(1)).showTitle(any(net.kyori.adventure.title.Title.class));
+            verify(mockPlayer2, times(1)).showTitle(any(net.kyori.adventure.title.Title.class));
+        }
+    }
+
+    @Test
+    void testShowWorldCycleCompleteTitleHandlesException() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        
+        when(mockPlayer.getName()).thenReturn("FailingPlayer");
+        doThrow(new RuntimeException("Title display failed")).when(mockPlayer).showTitle(any(net.kyori.adventure.title.Title.class));
+        
+        // Setup logger
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        
+        // Access the private method
+        Method showTitleMethod = Main.class.getDeclaredMethod("showWorldCycleCompleteTitle", int.class);
+        showTitleMethod.setAccessible(true);
+        
+        try (MockedStatic<Bukkit> bukkitMock = mockStatic(Bukkit.class)) {
+            bukkitMock.when(Bukkit::getOnlinePlayers).thenReturn(Arrays.asList(mockPlayer));
+            
+            // Should not throw exception - exceptions are caught
+            assertDoesNotThrow(() -> showTitleMethod.invoke(plugin, 10));
+        }
+    }
+
+    @Test
+    void testScheduleCountdownThenSendPlayersToLobby() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        UUID playerId = UUID.randomUUID();
+        
+        lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
+        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.isDead()).thenReturn(false);
+        
+        // Setup required fields
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        setPrivateField(plugin, "pendingLobbyMoves", Collections.synchronizedSet(new HashSet<>()));
+        setPrivateField(plugin, "countdownBroadcastToAll", true);
+        setPrivateField(plugin, "lastCycleRequester", null);
+        setPrivateField(plugin, "lobbyServer", "lobby");
+        setPrivateField(plugin, "lobbyWorldName", "");
+        setPrivateField(plugin, "registeredBungeeChannel", true);
+        
+        // Mock sendPlayerToLobby to avoid actual implementation
+        doReturn(true).when(plugin).sendPlayerToLobby(any(org.bukkit.entity.Player.class));
+        
+        // Invoke the method with zero seconds (immediate)
+        plugin.scheduleCountdownThenSendPlayersToLobby(Arrays.asList(mockPlayer), 0);
+        
+        // With zero seconds, sendPlayerToLobby should be called directly
+        verify(plugin, times(1)).sendPlayerToLobby(mockPlayer);
+    }
+
+    @Test
+    void testScheduleCountdownThenSendPlayersToLobbyWithCountdown() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        UUID playerId = UUID.randomUUID();
+        
+        lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
+        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.isDead()).thenReturn(false);
+        
+        // Setup required fields
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        setPrivateField(plugin, "pendingLobbyMoves", Collections.synchronizedSet(new HashSet<>()));
+        setPrivateField(plugin, "countdownBroadcastToAll", true);
+        setPrivateField(plugin, "lastCycleRequester", null);
+        
+        // Mock scheduler to capture the runnable
+        org.bukkit.scheduler.BukkitTask mockTask = mock(org.bukkit.scheduler.BukkitTask.class);
+        when(mockScheduler.runTaskTimer(any(Main.class), any(Runnable.class), anyLong(), anyLong())).thenReturn(mockTask);
+        
+        try (MockedStatic<Bukkit> bukkitMock = mockStatic(Bukkit.class)) {
+            bukkitMock.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            bukkitMock.when(Bukkit::getOnlinePlayers).thenReturn(Arrays.asList(mockPlayer));
+            
+            // Invoke the method with countdown
+            plugin.scheduleCountdownThenSendPlayersToLobby(Arrays.asList(mockPlayer), 5);
+            
+            // Should schedule a task
+            verify(mockScheduler, times(1)).runTaskTimer(eq(plugin), any(Runnable.class), eq(0L), eq(20L));
+        }
+    }
+
+    @Test
+    void testScheduleCountdownThenMovePlayersToHardcore() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        UUID playerId = UUID.randomUUID();
+        
+        lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
+        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.isDead()).thenReturn(false);
+        
+        // Setup required fields
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        setPrivateField(plugin, "pendingHardcoreMoves", Collections.synchronizedSet(new HashSet<>()));
+        setPrivateField(plugin, "countdownBroadcastToAll", true);
+        setPrivateField(plugin, "lastCycleRequester", null);
+        setPrivateField(plugin, "hardcoreServerName", "hardcore");
+        setPrivateField(plugin, "cycleStartPending", new java.util.concurrent.atomic.AtomicBoolean(true));
+        setPrivateField(plugin, "cycleNumber", new java.util.concurrent.atomic.AtomicInteger(1));
+        
+        // Mock methods that will be called
+        doNothing().when(plugin).clearCycleStartPending();
+        lenient().doReturn(true).when(plugin).sendPlayerToServer(any(org.bukkit.entity.Player.class), anyString());
+        
+        try (MockedStatic<Bukkit> bukkitMock = mockStatic(Bukkit.class)) {
+            bukkitMock.when(Bukkit::getOnlinePlayers).thenReturn(Arrays.asList(mockPlayer));
+            
+            // Invoke the method with zero seconds (immediate)
+            plugin.scheduleCountdownThenMovePlayersToHardcore(0);
+            
+            // clearCycleStartPending should be called
+            verify(plugin, times(1)).clearCycleStartPending();
+        }
+    }
+
+    @Test
+    void testScheduleCountdownThenMovePlayersToHardcoreWithCountdown() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        UUID playerId = UUID.randomUUID();
+        
+        lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
+        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.isDead()).thenReturn(false);
+        
+        // Setup required fields
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        setPrivateField(plugin, "pendingHardcoreMoves", Collections.synchronizedSet(new HashSet<>()));
+        setPrivateField(plugin, "countdownBroadcastToAll", true);
+        setPrivateField(plugin, "lastCycleRequester", null);
+        setPrivateField(plugin, "hardcoreServerName", "hardcore");
+        setPrivateField(plugin, "cycleStartPending", new java.util.concurrent.atomic.AtomicBoolean(true));
+        
+        // Mock scheduler
+        org.bukkit.scheduler.BukkitTask mockTask = mock(org.bukkit.scheduler.BukkitTask.class);
+        when(mockScheduler.runTaskTimer(any(Main.class), any(Runnable.class), anyLong(), anyLong())).thenReturn(mockTask);
+        
+        try (MockedStatic<Bukkit> bukkitMock = mockStatic(Bukkit.class)) {
+            bukkitMock.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            bukkitMock.when(Bukkit::getOnlinePlayers).thenReturn(Arrays.asList(mockPlayer));
+            
+            // Invoke the method with countdown
+            plugin.scheduleCountdownThenMovePlayersToHardcore(3);
+            
+            // Should schedule a task
+            verify(mockScheduler, times(1)).runTaskTimer(eq(plugin), any(Runnable.class), eq(0L), eq(20L));
+        }
+    }
+
+    @Test
+    void testScheduleCountdownThenMovePlayersToHardcoreWithEmptyServerName() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        
+        // Setup required fields with empty server name
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        setPrivateField(plugin, "hardcoreServerName", "");
+        setPrivateField(plugin, "cycleStartPending", new java.util.concurrent.atomic.AtomicBoolean(true));
+        
+        // Invoke the method - should return early without error
+        assertDoesNotThrow(() -> plugin.scheduleCountdownThenMovePlayersToHardcore(5));
+    }
 }
 
