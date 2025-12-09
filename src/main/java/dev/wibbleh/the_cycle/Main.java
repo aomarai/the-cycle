@@ -28,6 +28,11 @@ import net.kyori.adventure.title.Title;
 
 public class Main extends JavaPlugin implements Listener {
     private static final Logger LOG = Logger.getLogger("HardcoreCycle");
+    private static final int RPC_QUEUE_DRAIN_INTERVAL_TICKS = 20;
+    private static final int PERSISTENT_RPC_RETRY_INTERVAL_TICKS = 1200; // 60 seconds
+    private static final int GRACE_PERIOD_TICKS = 60; // 3 seconds
+    private static final int AUTO_START_DELAY_TICKS = 40; // 2 seconds
+    
     private final AtomicInteger cycleNumber = new AtomicInteger(1);
     // Attempt counter: number of cycles attempted before beating Minecraft (killing ender dragon)
     private final AtomicInteger attemptsSinceLastWin = new AtomicInteger(0);
@@ -66,9 +71,11 @@ public class Main extends JavaPlugin implements Listener {
      * It is used for forwarding RPC messages between the lobby and hardcore servers.
      */
     private static final String RPC_CHANNEL = "thecycle:rpc";
+    private static final int MAX_RPC_QUEUE = 100;
+    private static final int MAX_PERSISTENT_RPC_QUEUE = 100;
+    
     // Outbound RPC queue used when the Bungee outgoing channel isn't available yet.
     private final Deque<byte[]> outboundRpcQueue = new ArrayDeque<>();
-    private static final int MAX_RPC_QUEUE = 100;
     private int rpcQueueTaskId = -1;
  // Webhook
      private String webhookUrl;
@@ -101,7 +108,6 @@ public class Main extends JavaPlugin implements Listener {
     private File persistentRpcQueueFile;
     // Persistent queue for failed RPC messages (survives restarts)
     private final List<RpcQueueStorage.QueuedRpc> persistentRpcQueue = Collections.synchronizedList(new ArrayList<>());
-    private static final int MAX_PERSISTENT_RPC_QUEUE = 100;
     // Task ID for periodic RPC retry task
     private int persistentRpcRetryTaskId = -1;
 
@@ -161,9 +167,9 @@ public class Main extends JavaPlugin implements Listener {
 
         worldDeletionService = new WorldDeletionService(this, deletePrev, deferDelete, asyncDelete);
         webhookService = new WebhookService(this, webhookUrl);
-        DeathListener dl = new DeathListener(this, enableActionbarLocal, sharedDeath, aliveMap, deathRecap);
-        EnderDragonListener edl = new EnderDragonListener(this);
-        PlayerJoinListener pjl = new PlayerJoinListener(this);
+        var dl = new DeathListener(this, enableActionbarLocal, sharedDeath, aliveMap, deathRecap);
+        var edl = new EnderDragonListener(this);
+        var pjl = new PlayerJoinListener(this);
         commandHandler = new CommandHandler(this);
 
         // Register command executor and tab completer so /cycle works and supports autocomplete
@@ -190,7 +196,7 @@ public class Main extends JavaPlugin implements Listener {
         waitForPlayersToLeaveSeconds = cfg.getInt("behavior.wait_for_players_to_leave_seconds", 30);
         preGenerationCountdownEnabled = cfg.getBoolean("behavior.pre_generation_countdown_enabled", true);
         String httpBind = cfg.getString("server.http_bind", "");
-        RpcHandler rpcHandler = new RpcHandler(this, this, this.rpcSecret, RPC_CHANNEL);
+        var rpcHandler = new RpcHandler(this, this, this.rpcSecret, RPC_CHANNEL);
         try {
             // Incoming channel
             getServer().getMessenger().registerIncomingPluginChannel(this, RPC_CHANNEL, rpcHandler);
@@ -223,7 +229,7 @@ public class Main extends JavaPlugin implements Listener {
 
         // Schedule a periodic task to try to drain the outbound RPC queue (runs on main thread)
         if (rpcQueueTaskId == -1) {
-            rpcQueueTaskId = Bukkit.getScheduler().runTaskTimer(this, this::drainRpcQueue, 20L, 20L).getTaskId();
+            rpcQueueTaskId = Bukkit.getScheduler().runTaskTimer(this, this::drainRpcQueue, RPC_QUEUE_DRAIN_INTERVAL_TICKS, RPC_QUEUE_DRAIN_INTERVAL_TICKS).getTaskId();
         }
 
         getServer().getPluginManager().registerEvents(dl, this);
@@ -235,7 +241,7 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         if (enableScoreboard) {
-            Scoreboard scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
+            var scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
             // Use Component-based display name for newer server APIs (avoids deprecated overload)
             objective = scoreboard.registerNewObjective("hc_cycle", "dummy", Component.text("Hardcore Cycle"));
             objective.setDisplaySlot(DisplaySlot.SIDEBAR);
@@ -244,7 +250,8 @@ public class Main extends JavaPlugin implements Listener {
 
         Bukkit.getOnlinePlayers().forEach(p -> aliveMap.put(p.getUniqueId(), true));
 
-        LOG.info("TheCyclePlugin enabled — cycle #" + cycleNumber.get() + "; role=" + (isHardcoreBackend ? "hardcore" : "lobby") + ", bungeeRegistered=" + registeredBungeeChannel);
+        String roleLabel = isHardcoreBackend ? "hardcore" : "lobby";
+        LOG.info("TheCyclePlugin enabled — cycle #" + cycleNumber.get() + "; role=" + roleLabel + ", bungeeRegistered=" + registeredBungeeChannel);
     }
 
     /**
@@ -514,7 +521,7 @@ public class Main extends JavaPlugin implements Listener {
                 writeCycleFile(cycleNumber.get());
                 return;
             }
-            try (BufferedReader r = new BufferedReader(new FileReader(cycleFile))) {
+            try (var r = new BufferedReader(new FileReader(cycleFile))) {
                 String s = r.readLine();
                 if (s != null && !s.trim().isEmpty()) {
                     int n = Integer.parseInt(s.trim());
@@ -534,7 +541,7 @@ public class Main extends JavaPlugin implements Listener {
     private void writeCycleFile(int n) {
         try {
             ensureDataFolderExists();
-            try (BufferedWriter w = new BufferedWriter(new FileWriter(cycleFile))) {
+            try (var w = new BufferedWriter(new FileWriter(cycleFile))) {
                 w.write(String.valueOf(n));
             }
         } catch (Exception e) {
@@ -552,7 +559,7 @@ public class Main extends JavaPlugin implements Listener {
                 writeStatsFile();
                 return;
             }
-            try (BufferedReader r = new BufferedReader(new FileReader(statsFile))) {
+            try (var r = new BufferedReader(new FileReader(statsFile))) {
                 String attemptsLine = r.readLine();
                 String winsLine = r.readLine();
                 if (attemptsLine != null && !attemptsLine.trim().isEmpty()) {
@@ -573,7 +580,7 @@ public class Main extends JavaPlugin implements Listener {
     private void writeStatsFile() {
         try {
             ensureDataFolderExists();
-            try (BufferedWriter w = new BufferedWriter(new FileWriter(statsFile))) {
+            try (var w = new BufferedWriter(new FileWriter(statsFile))) {
                 w.write(String.valueOf(attemptsSinceLastWin.get()));
                 w.newLine();
                 w.write(String.valueOf(totalWins.get()));
@@ -615,7 +622,7 @@ public class Main extends JavaPlugin implements Listener {
      * @return JSON string payload
      */
     private String buildWebhookPayload(int cycleNum, List<Map<String, Object>> recap) {
-        StringBuilder sb = new StringBuilder();
+        var sb = new StringBuilder(512); // Pre-allocate reasonable initial capacity
         sb.append("{\"content\":null,\"embeds\":[{\"title\":\"Hardcore cycle ")
                 .append(cycleNum)
                 .append(" complete\",\"description\":\"Server generated new world for cycle #")
@@ -623,7 +630,7 @@ public class Main extends JavaPlugin implements Listener {
                 .append("\",\"fields\":[");
 
         for (int i = 0; i < recap.size(); i++) {
-            Map<String, Object> e = recap.get(i);
+            var e = recap.get(i);
             String name = (String) e.get("name");
             String time = (String) e.get("time");
             String cause = (String) e.get("cause");
@@ -696,8 +703,8 @@ public class Main extends JavaPlugin implements Listener {
             }
         }
         if (!lobbyServer.isEmpty() && registeredBungeeChannel) {
-            try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                 DataOutputStream out = new DataOutputStream(outputStream)) {
+            try (var outputStream = new ByteArrayOutputStream();
+                 var out = new DataOutputStream(outputStream)) {
                 out.writeUTF("Connect");
                 out.writeUTF(lobbyServer);
                 p.sendPluginMessage(this, "BungeeCord", outputStream.toByteArray());
@@ -709,7 +716,7 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         if (!lobbyWorldName.isEmpty()) {
-            World lw = Bukkit.getWorld(lobbyWorldName);
+            var lw = Bukkit.getWorld(lobbyWorldName);
             if (lw != null) {
                 try {
                     p.teleport(lw.getSpawnLocation());
@@ -1019,8 +1026,8 @@ public class Main extends JavaPlugin implements Listener {
             LOG.info("Cancelled existing RPC retry task.");
         }
         
-        // Schedule task to run every 60 seconds (1200 ticks)
-        persistentRpcRetryTaskId = Bukkit.getScheduler().runTaskTimer(this, this::retryPersistentRpcQueue, 20L * 60, 20L * 60).getTaskId();
+        // Schedule task to run every 60 seconds
+        persistentRpcRetryTaskId = Bukkit.getScheduler().runTaskTimer(this, this::retryPersistentRpcQueue, PERSISTENT_RPC_RETRY_INTERVAL_TICKS, PERSISTENT_RPC_RETRY_INTERVAL_TICKS).getTaskId();
         LOG.info("Scheduled periodic RPC retry task (every 60 seconds).");
     }
 
@@ -1037,11 +1044,10 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         LOG.info("Retrying " + persistentRpcQueue.size() + " persistent RPCs...");
-        List<RpcQueueStorage.QueuedRpc> toRemove = new ArrayList<>();
-        List<RpcQueueStorage.QueuedRpc> toUpdate = new ArrayList<>();
+        var toRemove = new ArrayList<RpcQueueStorage.QueuedRpc>();
+        var toUpdate = new ArrayList<RpcQueueStorage.QueuedRpc>();
         
-        for (int i = 0; i < persistentRpcQueue.size(); i++) {
-            RpcQueueStorage.QueuedRpc rpc = persistentRpcQueue.get(i);
+        for (var rpc : persistentRpcQueue) {
             if (rpc.isExpired()) {
                 toRemove.add(rpc);
                 LOG.info("Removing expired RPC: action=" + rpc.action());
@@ -1052,8 +1058,8 @@ public class Main extends JavaPlugin implements Listener {
                 String payload = new String(rpc.payload(), java.nio.charset.StandardCharsets.UTF_8);
                 String sig = RpcHttpUtil.computeHmacHex(rpcSecret, payload);
                 
-                HttpRetryUtil.RetryConfig retryConfig = HttpRetryUtil.RetryConfig.noRetry();
-                HttpRetryUtil.HttpResult result = HttpRetryUtil.postWithRetry(hardcoreHttpUrl, payload, sig, retryConfig);
+                var retryConfig = HttpRetryUtil.RetryConfig.noRetry();
+                var result = HttpRetryUtil.postWithRetry(hardcoreHttpUrl, payload, sig, retryConfig);
                 
                 if (result.success()) {
                     LOG.info("Persistent RPC retry succeeded: action=" + rpc.action());
@@ -1069,7 +1075,7 @@ public class Main extends JavaPlugin implements Listener {
         }
 
         // Apply updates in a single pass
-        for (RpcQueueStorage.QueuedRpc rpc : toUpdate) {
+        for (var rpc : toUpdate) {
             int index = persistentRpcQueue.indexOf(rpc);
             if (index >= 0) {
                 persistentRpcQueue.set(index, rpc.withIncrementedAttempts());
@@ -1139,20 +1145,20 @@ public class Main extends JavaPlugin implements Listener {
         if (players == null) return;
         if (players.isEmpty() || seconds <= 0) {
             // immediate send for zero/invalid durations
-            for (Player p : players) sendPlayerToLobby(p);
+            players.forEach(this::sendPlayerToLobby);
             return;
         }
         // Determine effective target players based on broadcast config and last requester
         Collection<? extends Player> targets;
         if (!countdownBroadcastToAll && lastCycleRequester != null) {
-            Player req = Bukkit.getPlayer(lastCycleRequester);
+            var req = Bukkit.getPlayer(lastCycleRequester);
             if (req != null && players.contains(req)) targets = List.of(req);
             else targets = players;
         } else {
             targets = players;
         }
         // Add all targets to pending moves so respawn will trigger a move if they're dead when countdown ends
-        for (Player p : targets) { if (p != null) pendingLobbyMoves.add(p.getUniqueId()); }
+        targets.forEach(p -> { if (p != null) pendingLobbyMoves.add(p.getUniqueId()); });
         savePendingMovesAsync();
         final int total = seconds;
         new org.bukkit.scheduler.BukkitRunnable() {
@@ -1160,7 +1166,7 @@ public class Main extends JavaPlugin implements Listener {
              @Override
              public void run() {
                  if (remaining <= 0) {
-                    for (Player p : targets) {
+                    for (var p : targets) {
                          if (p == null) continue;
                          if (p.isDead()) {
                              // keep in pending set and wait for respawn
@@ -1184,7 +1190,7 @@ public class Main extends JavaPlugin implements Listener {
                     bossBar.setTitle("Returning to lobby in " + remaining + "s");
                     Bukkit.getOnlinePlayers().forEach(pl -> { if (!bossBar.getPlayers().contains(pl)) bossBar.addPlayer(pl); });
                 }
-                for (Player p : targets) {
+                for (var p : targets) {
                     if (p == null) continue;
                     try { p.sendMessage("[HardcoreCycle] Sending you to the lobby in " + remaining + " second(s)..."); } catch (Exception ignored) {}
                 }
@@ -1206,7 +1212,7 @@ public class Main extends JavaPlugin implements Listener {
             return;
         }
         if (seconds <= 0) {
-            for (Player p : Bukkit.getOnlinePlayers()) {
+            for (var p : Bukkit.getOnlinePlayers()) {
                 showCycleStartTitle(p);
                 sendPlayerToServer(p, target);
             }
@@ -1215,7 +1221,7 @@ public class Main extends JavaPlugin implements Listener {
         // Determine targets depending on broadcast config and last requester
         Collection<? extends Player> targets;
         if (!countdownBroadcastToAll && lastCycleRequester != null) {
-            Player req = Bukkit.getPlayer(lastCycleRequester);
+            var req = Bukkit.getPlayer(lastCycleRequester);
             if (req != null) targets = List.of(req);
             else targets = Bukkit.getOnlinePlayers();
         } else {
@@ -1228,7 +1234,7 @@ public class Main extends JavaPlugin implements Listener {
             return;
         }
         // Mark targets as pending hardcore moves
-        for (Player p : targets) { if (p != null) pendingHardcoreMoves.add(p.getUniqueId()); }
+        targets.forEach(p -> { if (p != null) pendingHardcoreMoves.add(p.getUniqueId()); });
         savePendingMovesAsync();
         final int total = seconds;
         new org.bukkit.scheduler.BukkitRunnable() {
@@ -1236,7 +1242,7 @@ public class Main extends JavaPlugin implements Listener {
             @Override
             public void run() {
                 if (remaining <= 0) {
-                    for (Player p : targets) {
+                    for (var p : targets) {
                         if (p == null) continue;
                         if (p.isDead()) {
                             LOG.info("Player " + p.getName() + " still dead at hardcore countdown end; will move on respawn.");
@@ -1260,7 +1266,7 @@ public class Main extends JavaPlugin implements Listener {
                     bossBar.setTitle("Moving to hardcore in " + remaining + "s");
                     Bukkit.getOnlinePlayers().forEach(pl -> { if (!bossBar.getPlayers().contains(pl)) bossBar.addPlayer(pl); });
                 }
-                for (Player p : targets) {
+                for (var p : targets) {
                     try { p.sendMessage("[HardcoreCycle] Moving you to hardcore server in " + remaining + " second(s)..."); } catch (Exception ignored) {}
                 }
                 remaining--;

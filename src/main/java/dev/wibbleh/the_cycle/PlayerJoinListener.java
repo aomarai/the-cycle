@@ -13,6 +13,8 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
  * Also handles automatic cycle starting when players are waiting in lobby.
  */
 public class PlayerJoinListener implements Listener {
+    private static final long AUTO_START_CHECK_DELAY_TICKS = 40; // 2 seconds
+    
     private final Main plugin;
 
     public PlayerJoinListener(Main plugin) {
@@ -26,7 +28,7 @@ public class PlayerJoinListener implements Listener {
      */
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        Player p = event.getPlayer();
+        var p = event.getPlayer();
         
         // Handle hardcore server join (prevent mid-cycle joins)
         if (plugin.isHardcoreBackend()) {
@@ -76,7 +78,7 @@ public class PlayerJoinListener implements Listener {
                 // Only auto-start if we haven't already scheduled one
                 plugin.checkAndAutoStartCycle();
             }
-        }, 40L); // 2 seconds delay
+        }, AUTO_START_CHECK_DELAY_TICKS);
     }
 
     /**
@@ -84,7 +86,7 @@ public class PlayerJoinListener implements Listener {
      */
     @EventHandler
     public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
-        Player p = event.getPlayer();
+        var p = event.getPlayer();
         String newWorldName = p.getWorld().getName();
         
         // If player entered a hardcore world, add them to the current cycle

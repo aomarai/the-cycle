@@ -16,6 +16,11 @@ import java.time.Duration;
  * Listener that handles ender dragon kills and updates the win/attempt tracking.
  */
 public class EnderDragonListener implements Listener {
+    private static final int TITLE_FADE_IN_MILLIS = 500;
+    private static final int TITLE_STAY_SECONDS = 5;
+    private static final int TITLE_FADE_OUT_SECONDS = 1;
+    private static final String SEPARATOR = "=".repeat(50);
+    
     private final Main plugin;
 
     public EnderDragonListener(Main plugin) {
@@ -38,31 +43,31 @@ public class EnderDragonListener implements Listener {
         plugin.recordDragonKill();
 
         // Show large title screen to all players
-        Player killer = event.getEntity().getKiller();
+        var killer = event.getEntity().getKiller();
         String killerName = killer != null ? killer.getName() : "Unknown Hero";
         
-        Component title = Component.text("MINECRAFT BEATEN!", NamedTextColor.GOLD);
-        Component subtitle = Component.text("Killed by " + killerName, NamedTextColor.YELLOW);
+        var title = Component.text("MINECRAFT BEATEN!", NamedTextColor.GOLD);
+        var subtitle = Component.text("Killed by " + killerName, NamedTextColor.YELLOW);
         
-        Title titleScreen = Title.title(
+        var titleScreen = Title.title(
             title,
             subtitle,
             Title.Times.times(
-                Duration.ofMillis(500),  // fade in
-                Duration.ofSeconds(5),    // stay
-                Duration.ofSeconds(1)     // fade out
+                Duration.ofMillis(TITLE_FADE_IN_MILLIS),
+                Duration.ofSeconds(TITLE_STAY_SECONDS),
+                Duration.ofSeconds(TITLE_FADE_OUT_SECONDS)
             )
         );
 
         // Show to all online players
-        for (Player p : Bukkit.getOnlinePlayers()) {
+        for (var p : Bukkit.getOnlinePlayers()) {
             p.showTitle(titleScreen);
-            p.sendMessage(Component.text("=".repeat(50), NamedTextColor.GOLD));
+            p.sendMessage(Component.text(SEPARATOR, NamedTextColor.GOLD));
             p.sendMessage(Component.text("VICTORY! The Ender Dragon has been defeated!", NamedTextColor.GOLD));
             p.sendMessage(Component.text("Killer: " + killerName, NamedTextColor.YELLOW));
             p.sendMessage(Component.text("Attempts this win: " + attemptsThisWin, NamedTextColor.GREEN));
             p.sendMessage(Component.text("Total wins: " + plugin.getTotalWins(), NamedTextColor.GREEN));
-            p.sendMessage(Component.text("=".repeat(50), NamedTextColor.GOLD));
+            p.sendMessage(Component.text(SEPARATOR, NamedTextColor.GOLD));
         }
     }
 }

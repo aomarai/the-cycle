@@ -14,6 +14,10 @@ import java.nio.charset.StandardCharsets;
  * Posts run asynchronously on the server scheduler to avoid blocking the main thread.
  */
 public class WebhookService {
+    private static final int REQUEST_TIMEOUT_SECONDS = 15;
+    private static final int HTTP_OK_MIN = 200;
+    private static final int HTTP_OK_MAX = 300;
+    
     private final JavaPlugin plugin;
     private final String webhookUrl;
 
@@ -38,16 +42,16 @@ public class WebhookService {
         if (webhookUrl == null || webhookUrl.trim().isEmpty()) return;
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                HttpClient client = HttpClient.newBuilder().build();
-                HttpRequest req = HttpRequest.newBuilder()
+                var client = HttpClient.newBuilder().build();
+                var req = HttpRequest.newBuilder()
                         .uri(URI.create(webhookUrl))
-                        .timeout(java.time.Duration.ofSeconds(15))
+                        .timeout(java.time.Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
                         .header("Content-Type", "application/json; charset=utf-8")
                         .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
                         .build();
-                HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
+                var resp = client.send(req, HttpResponse.BodyHandlers.discarding());
                 int code = resp.statusCode();
-                if (code >= 200 && code < 300) plugin.getLogger().info("Webhook POST returned " + code);
+                if (code >= HTTP_OK_MIN && code < HTTP_OK_MAX) plugin.getLogger().info("Webhook POST returned " + code);
                 else plugin.getLogger().warning("Webhook POST returned non-2xx code " + code);
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to send webhook: " + e.getMessage());

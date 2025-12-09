@@ -8,7 +8,6 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -58,8 +57,8 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             if (args[0].equalsIgnoreCase("setcycle") && args.length == 2) {
                 try {
                     int n = Integer.parseInt(args[1]);
-                    if (plugin instanceof Main) {
-                        ((Main) plugin).setCycleNumber(n);
+                    if (plugin instanceof Main m) {
+                        m.setCycleNumber(n);
                     }
                     sender.sendMessage("Cycle number set to " + n);
                 } catch (NumberFormatException ex) {
@@ -68,8 +67,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 return true;
             }
             if (args[0].equalsIgnoreCase("cycle-now")) {
-                if (plugin instanceof Main) {
-                    Main m = (Main) plugin;
+                if (plugin instanceof Main m) {
                     // Permission check: only allow forwarding/executing if sender has the command permission
                     if (sender != null && !sender.hasPermission("thecycle.cycle")) {
                         sender.sendMessage("You do not have permission to use that command.");
@@ -95,9 +93,11 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 return true;
             }
             if (args[0].equalsIgnoreCase("status")) {
-                if (plugin instanceof Main)
-                    sender.sendMessage("Cycle=" + ((Main) plugin).getCycleNumber() + " playersOnline=" + Bukkit.getOnlinePlayers().size());
-                else sender.sendMessage("Cycle=unknown");
+                if (plugin instanceof Main m) {
+                    sender.sendMessage("Cycle=" + m.getCycleNumber() + " playersOnline=" + Bukkit.getOnlinePlayers().size());
+                } else {
+                    sender.sendMessage("Cycle=unknown");
+                }
                 return true;
             }
         }
@@ -118,16 +118,16 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String alias, @NotNull String[] args) {
         if (!cmd.getName().equalsIgnoreCase("cycle")) return Collections.emptyList();
         if (args.length == 1) {
-            List<String> subs = Arrays.asList("setcycle", "cycle-now", "status");
+            var subs = Arrays.asList("setcycle", "cycle-now", "status");
             String partial = args[0].toLowerCase();
-            List<String> out = new ArrayList<>();
-            for (String s : subs) if (s.startsWith(partial)) out.add(s);
-            return out;
+            return subs.stream()
+                    .filter(s -> s.startsWith(partial))
+                    .toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("setcycle")) {
             // Suggest a few nearby numbers based on current cycle (if available)
-            if (plugin instanceof Main) {
-                int cur = ((Main) plugin).getCycleNumber();
+            if (plugin instanceof Main m) {
+                int cur = m.getCycleNumber();
                 return Arrays.asList(String.valueOf(cur), String.valueOf(cur + 1), String.valueOf(cur + 2));
             }
             return Arrays.asList("1", "2", "3");
