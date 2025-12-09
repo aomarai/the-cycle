@@ -65,7 +65,6 @@ behavior:
 features:
   scoreboard: true               # Display cycle stats
   actionbar: true
-  bossbar: true
 
 webhook:
   url: ""                        # Optional Discord webhook URL
