@@ -392,7 +392,16 @@ public class Main extends JavaPlugin implements Listener {
 
         // Start a short delay before attempting generation, then poll for remaining players leaving worlds
         Bukkit.getScheduler().runTaskLater(this, () -> {
-            // If we should wait for players to leave, poll once per second up to the configured timeout
+            // If restart_on_cycle is enabled, skip the legacy unload/delete logic
+            // The world will not be deleted before restart (it's the main world and can't be unloaded)
+            // It will be cleaned up on the NEXT cycle
+            if (restartOnCycle) {
+                LOG.info("Restart-on-cycle enabled; skipping world unload (will restart after updating server.properties).");
+                doGenerateWorld(cycleNum);
+                return;
+            }
+            
+            // Legacy mode: If we should wait for players to leave, poll once per second up to the configured timeout
             // Wait if previous world exists and deletion is enabled
             if (waitForPlayersToLeaveSeconds > 0 && next > 1 && cfg.getBoolean("behavior.delete_previous_worlds", true)) {
                 final int[] elapsed = {0};
