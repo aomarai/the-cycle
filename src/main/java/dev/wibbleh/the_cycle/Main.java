@@ -2,9 +2,6 @@ package dev.wibbleh.the_cycle;
 
 import org.bukkit.Bukkit;
 import org.bukkit.World;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
-import org.bukkit.boss.BossBar;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -19,6 +16,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.*;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
@@ -31,6 +29,21 @@ public class Main extends JavaPlugin implements Listener {
     private static final int PERSISTENT_RPC_RETRY_INTERVAL_TICKS = 1200; // 60 seconds
     private static final int GRACE_PERIOD_TICKS = 60; // 3 seconds
     private static final int AUTO_START_DELAY_TICKS = 40; // 2 seconds
+    
+    // Title screen timing constants
+    private static final long CYCLE_COMPLETE_FADE_IN_MILLIS = 500;
+    private static final long CYCLE_COMPLETE_STAY_SECONDS = 2;
+    private static final long CYCLE_COMPLETE_FADE_OUT_SECONDS = 1;
+    private static final long COUNTDOWN_FADE_IN_MILLIS = 0;
+    private static final long COUNTDOWN_STAY_MILLIS = 950;  // Stay for 950ms to ensure smooth transitions without overlap
+    private static final long COUNTDOWN_FADE_OUT_MILLIS = 50;  // Quick fade to next countdown
+    private static final long CYCLE_START_FADE_IN_MILLIS = 500;
+    private static final long CYCLE_START_STAY_SECONDS = 3;
+    private static final long CYCLE_START_FADE_OUT_SECONDS = 1;
+    
+    // Scheduler timing constants
+    private static final long COUNTDOWN_INITIAL_DELAY_TICKS = 0L;
+    private static final long TICKS_PER_SECOND = 20L;
     
     private final AtomicInteger cycleNumber = new AtomicInteger(1);
     // Attempt counter: number of cycles attempted before beating Minecraft (killing ender dragon)
@@ -47,8 +60,6 @@ public class Main extends JavaPlugin implements Listener {
     private final Set<UUID> playersInCurrentCycle = Collections.synchronizedSet(new HashSet<>());
     private FileConfiguration cfg;
     private boolean enableScoreboard;
-    private boolean enableBossBar;
-    private BossBar bossBar;
     private Objective objective;
     // Lobby configuration: either a server name for Bungee/Velocity or a world name on this server
     private String lobbyServer;
@@ -88,6 +99,10 @@ public class Main extends JavaPlugin implements Listener {
     // Countdown durations (seconds) for moving players
     private int countdownSendToLobbySeconds = 10;
     private int countdownSendToHardcoreSeconds = 10;
+    // Seed configuration: when true, a new random seed will be used for each generated hardcore world
+    private boolean randomizeSeed = true;
+    // Optional configured seed (only used when randomizeSeed is false and non-zero)
+    private long configuredSeed = 0L;
     // Delay (seconds) to wait before starting world generation (configurable)
     private int delayBeforeGenerationSeconds = 3;
     // Maximum seconds to wait for players to leave the previous hardcore world before forcing generation
@@ -138,7 +153,6 @@ public class Main extends JavaPlugin implements Listener {
 
         enableScoreboard = cfg.getBoolean("features.scoreboard", true);
         boolean enableActionbarLocal = cfg.getBoolean("features.actionbar", true);
-        enableBossBar = cfg.getBoolean("features.bossbar", true);
         webhookUrl = cfg.getString("webhook.url", "");
         // lobby config
         lobbyServer = cfg.getString("lobby.server", "").trim();
@@ -190,6 +204,9 @@ public class Main extends JavaPlugin implements Listener {
         countdownSendToLobbySeconds = cfg.getInt("behavior.countdown_send_to_lobby_seconds", 10);
         countdownSendToHardcoreSeconds = cfg.getInt("behavior.countdown_send_to_hardcore_seconds", 10);
         countdownBroadcastToAll = cfg.getBoolean("behavior.countdown_broadcast_to_all", true);
+        // Seed config: default to random seed per-cycle unless configured otherwise
+        randomizeSeed = cfg.getBoolean("server.randomize_seed", true);
+        configuredSeed = cfg.getLong("server.seed", 0L);
         // Delay and wait settings for safe generation
         delayBeforeGenerationSeconds = cfg.getInt("behavior.delay_before_generation_seconds", 3);
         waitForPlayersToLeaveSeconds = cfg.getInt("behavior.wait_for_players_to_leave_seconds", 30);
@@ -234,10 +251,6 @@ public class Main extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(dl, this);
         getServer().getPluginManager().registerEvents(edl, this);
         getServer().getPluginManager().registerEvents(pjl, this);
-
-        if (enableBossBar) {
-            bossBar = Bukkit.createBossBar("Next world in progress...", BarColor.GREEN, BarStyle.SOLID);
-        }
 
         if (enableScoreboard) {
             var scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
@@ -427,7 +440,15 @@ public class Main extends JavaPlugin implements Listener {
 
         World newWorld = null;
         try {
-            newWorld = Bukkit.createWorld(new org.bukkit.WorldCreator(newWorldName));
+            // Build WorldCreator and apply seed strategy using SeedUtil
+            org.bukkit.WorldCreator wc = new org.bukkit.WorldCreator(newWorldName);
+            java.util.OptionalLong maybeSeed = SeedUtil.selectSeed(randomizeSeed, configuredSeed);
+            if (maybeSeed.isPresent()) {
+                long seed = maybeSeed.getAsLong();
+                wc.seed(seed);
+                LOG.info("Using seed " + seed + " for world " + newWorldName);
+            }
+            newWorld = Bukkit.createWorld(wc);
         } catch (Exception e) {
             LOG.warning("Failed to create new world '" + newWorldName + "': " + e.getMessage());
         }
@@ -491,7 +512,8 @@ public class Main extends JavaPlugin implements Listener {
             Bukkit.getOnlinePlayers().forEach(this::sendPlayerToLobby);
         }
 
-        pushBossbar("World cycled — welcome to cycle #" + next);
+        // Show premium title notification for world cycle completion
+        showWorldCycleCompleteTitle(next);
 
         LOG.info("Cycle " + next + " complete.");
     }
@@ -600,17 +622,40 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     /**
-     * Update the boss bar title for all players if boss bar support is enabled.
-     *
-     * @param message message to display to players
+     * Show a premium title notification when a world cycle is complete.
      */
-    private void pushBossbar(String message) {
-        if (!enableBossBar || bossBar == null) return;
-        bossBar.setTitle(message);
-        // Add all online players to show
-        Bukkit.getOnlinePlayers().forEach(p -> {
-            if (!bossBar.getPlayers().contains(p)) bossBar.addPlayer(p);
-        });
+    private void showWorldCycleCompleteTitle(int cycleNum) {
+        Component title = Component.text("CYCLE " + cycleNum, NamedTextColor.GOLD);
+        Component subtitle = Component.text("Ready to Play!", NamedTextColor.GREEN);
+        Title titleScreen = Title.title(
+            title,
+            subtitle,
+            Title.Times.times(
+                Duration.ofMillis(CYCLE_COMPLETE_FADE_IN_MILLIS),
+                Duration.ofSeconds(CYCLE_COMPLETE_STAY_SECONDS),
+                Duration.ofSeconds(CYCLE_COMPLETE_FADE_OUT_SECONDS)
+            )
+        );
+        
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            try {
+                p.showTitle(titleScreen);
+            } catch (Exception e) {
+                LOG.warning("Failed to show cycle complete title to " + p.getName() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Create shared title times for countdown displays.
+     * @return Title.Times configured for countdown animations
+     */
+    private static Title.Times createCountdownTitleTimes() {
+        return Title.Times.times(
+            Duration.ofMillis(COUNTDOWN_FADE_IN_MILLIS),
+            Duration.ofMillis(COUNTDOWN_STAY_MILLIS),
+            Duration.ofMillis(COUNTDOWN_FADE_OUT_MILLIS)
+        );
     }
 
     /**
@@ -1160,6 +1205,9 @@ public class Main extends JavaPlugin implements Listener {
         targets.forEach(p -> { if (p != null) pendingLobbyMoves.add(p.getUniqueId()); });
         savePendingMovesAsync();
         final int total = seconds;
+        // Create static title component once outside the loop for reuse
+        final Component lobbyTitleStatic = Component.text("Returning to Lobby", NamedTextColor.YELLOW);
+        final Title.Times titleTimes = createCountdownTitleTimes();
         new org.bukkit.scheduler.BukkitRunnable() {
              int remaining = total;
              @Override
@@ -1176,26 +1224,26 @@ public class Main extends JavaPlugin implements Listener {
                              sendPlayerToLobby(p);
                          }
                      }
-                     // cleanup UI/state
-                     if (enableBossBar && bossBar != null) {
-                         bossBar.removeAll();
-                     }
                      clearLastCycleRequester();
                      cancel();
                       return;
                  }
-                // Update bossbar and chat messages
-                if (enableBossBar && bossBar != null) {
-                    bossBar.setTitle("Returning to lobby in " + remaining + "s");
-                    Bukkit.getOnlinePlayers().forEach(pl -> { if (!bossBar.getPlayers().contains(pl)) bossBar.addPlayer(pl); });
-                }
+                // Show premium title countdown - create subtitle once per iteration
+                Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
+                Title titleScreen = Title.title(lobbyTitleStatic, subtitle, titleTimes);
+                Component actionBarMsg = Component.text("Lobby transfer in " + remaining + "s", NamedTextColor.GOLD);
+                
                 for (var p : targets) {
                     if (p == null) continue;
-                    try { p.sendMessage("[HardcoreCycle] Sending you to the lobby in " + remaining + " second(s)..."); } catch (Exception ignored) {}
+                    try {
+                        p.showTitle(titleScreen);
+                        // Also send action bar for less intrusive reminder
+                        p.sendActionBar(actionBarMsg);
+                    } catch (Exception ignored) {}
                 }
                 remaining--;
             }
-        }.runTaskTimer(this, 0L, 20L);
+        }.runTaskTimer(this, COUNTDOWN_INITIAL_DELAY_TICKS, TICKS_PER_SECOND);
     }
 
     /**
@@ -1236,6 +1284,9 @@ public class Main extends JavaPlugin implements Listener {
         targets.forEach(p -> { if (p != null) pendingHardcoreMoves.add(p.getUniqueId()); });
         savePendingMovesAsync();
         final int total = seconds;
+        // Create static title component once outside the loop for reuse
+        final Component hardcoreTitleStatic = Component.text("Entering Hardcore", NamedTextColor.RED);
+        final Title.Times titleTimes = createCountdownTitleTimes();
         new org.bukkit.scheduler.BukkitRunnable() {
             int remaining = total;
             @Override
@@ -1252,25 +1303,34 @@ public class Main extends JavaPlugin implements Listener {
                             sendPlayerToServer(p, target);
                         }
                     }
-                    // cleanup UI/state
-                    if (enableBossBar && bossBar != null) {
-                        bossBar.removeAll();
-                    }
                     clearLastCycleRequester();
                     cancel();
                      return;
                  }
-                // Update bossbar and chat messages
-                if (enableBossBar && bossBar != null) {
-                    bossBar.setTitle("Moving to hardcore in " + remaining + "s");
-                    Bukkit.getOnlinePlayers().forEach(pl -> { if (!bossBar.getPlayers().contains(pl)) bossBar.addPlayer(pl); });
-                }
+                // Show premium title countdown - create subtitle once per iteration
+                Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
+                Title titleScreen = Title.title(hardcoreTitleStatic, subtitle, titleTimes);
+                Component actionBarMsg = Component.text("Hardcore transfer in " + remaining + "s", NamedTextColor.GOLD);
+                
                 for (var p : targets) {
-                    try { p.sendMessage("[HardcoreCycle] Moving you to hardcore server in " + remaining + " second(s)..."); } catch (Exception ignored) {}
+                    if (p == null) continue;
+                    try {
+                        p.showTitle(titleScreen);
+                        // Also send action bar for less intrusive reminder
+                        p.sendActionBar(actionBarMsg);
+                    } catch (Exception ignored) {}
                 }
                 remaining--;
             }
-        }.runTaskTimer(this, 0L, 20L);
+        }.runTaskTimer(this, COUNTDOWN_INITIAL_DELAY_TICKS, TICKS_PER_SECOND);
+    }
+
+    /**
+     * Show a large title screen to a player when they're about to enter a new cycle.
+     * Public wrapper method for external access (e.g., from PlayerJoinListener).
+     */
+    public void showCycleStartTitleToPlayer(Player p) {
+        showCycleStartTitle(p);
     }
 
     /**
@@ -1285,9 +1345,9 @@ public class Main extends JavaPlugin implements Listener {
                 title,
                 subtitle,
                 Title.Times.times(
-                    Duration.ofMillis(500),  // fade in
-                    Duration.ofSeconds(3),    // stay
-                    Duration.ofSeconds(1)     // fade out
+                    Duration.ofMillis(CYCLE_START_FADE_IN_MILLIS),
+                    Duration.ofSeconds(CYCLE_START_STAY_SECONDS),
+                    Duration.ofSeconds(CYCLE_START_FADE_OUT_SECONDS)
                 )
             );
             p.showTitle(titleScreen);

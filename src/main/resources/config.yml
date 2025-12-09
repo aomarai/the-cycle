@@ -2,7 +2,6 @@
 features:
   scoreboard: true
   actionbar: true
-  bossbar: true
 
 webhook:
   url: ""
@@ -21,7 +20,7 @@ behavior:
 # Server role controls whether this instance is responsible for creating/deleting worlds.
 # Values: "hardcore" (the backend that hosts the cyclical hardcore worlds) or "lobby"
 # When set to "lobby" the plugin will not create or delete worlds; it will only provide
-# lobby-side features such as scoreboard/bossbar and local-lobby teleportation.
+# lobby-side features such as scoreboard and local-lobby teleportation.
 server:
   role: "hardcore"
   # Optional: name of the hardcore backend server (as defined in your proxy) that lobby
