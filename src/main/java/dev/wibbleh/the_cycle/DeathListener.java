@@ -2,6 +2,7 @@ package dev.wibbleh.the_cycle;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -63,13 +64,27 @@ public class DeathListener implements Listener {
 
         aliveMap.put(id, false);
 
+        // Respawn dead player after 3 seconds to facilitate teleporting back to lobby server
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!dead.isOnline()) {
+                plugin.getLogger().info("Player " + dead.getName() + " disconnected before they could be respawned.");
+                return;
+            }
+            try {
+                dead.spigot().respawn();
+                plugin.getLogger().info("Respawned " + dead.getName() + " after hardcore mode death.");
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to respawn dead player: " + e.getMessage());
+            }
+        }, 200L);
+
         // Mark this player to be moved to the lobby when they respawn (prevents them from being left behind)
         if (plugin instanceof Main m) {
             try {
                 m.addPendingLobbyMove(id);
                 plugin.getLogger().info("Marked player " + dead.getName() + " (" + id + ") for pending lobby move on respawn.");
             } catch (Exception ignored) {
-                plugin.getLogger().warning("Failed to mark pending lobby move for " + id + ": " + ignored.getMessage());
+                plugin.getLogger().warning("Failed to mark pending lobby move for player " + dead.getName() + " with ID " + id + ": " + ignored.getMessage());
             }
         }
 
@@ -87,7 +102,7 @@ public class DeathListener implements Listener {
         deathRecap.add(entry);
 
         // Send a chat message to all players when someone dies in hardcore
-        String deathMsg = "☠ " + dead.getName() + " died in hardcore";
+        String deathMsg = "--------------------" + System.lineSeparator() + "☠ " + dead.getName() + " died ☠" + System.lineSeparator() + "--------------------";
         Component deathComponent = Component.text(deathMsg);
         Bukkit.getOnlinePlayers().forEach(p -> {
             try {
@@ -114,7 +129,7 @@ public class DeathListener implements Listener {
                         plugin.getLogger().info("All players dead, but shared-death is enabled; shared handler will trigger cycle.");
                         return;
                     }
-                    boolean cycleIfNoPlayers = plugin.getConfig().getBoolean("behavior.cycle_when_no_online_players", true);
+                    boolean cycleIfNoPlayers = plugin.getConfig().getBoolean("behavior.cycle_when_no_online_players", false);
                     if (Bukkit.getOnlinePlayers().isEmpty() && !cycleIfNoPlayers) {
                         plugin.getLogger().info("No online players and config prohibits cycling. Skipping.");
                         return;
