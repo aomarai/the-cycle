@@ -2,6 +2,7 @@ package dev.wibbleh.the_cycle;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -283,7 +284,7 @@ class DeathListenerTest {
             listener.onPlayerDeath(mockEvent);
             
             // Verify that the player's game mode was set to SPECTATOR
-            verify(mockPlayer, times(1)).setGameMode(org.bukkit.GameMode.SPECTATOR);
+            verify(mockPlayer, times(1)).setGameMode(GameMode.SPECTATOR);
         }
     }
 }

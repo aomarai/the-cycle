@@ -2,6 +2,7 @@ package dev.wibbleh.the_cycle;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -63,10 +64,10 @@ public class DeathListener implements Listener {
 
         aliveMap.put(id, false);
 
-        // Immediately switch dead player to spectator mode to allow teleportation
+        // Switch dead player to spectator mode on next tick to allow teleportation
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
-                dead.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                dead.setGameMode(GameMode.SPECTATOR);
                 plugin.getLogger().info("Switched " + dead.getName() + " to spectator mode after death.");
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to switch dead player to spectator: " + e.getMessage());
