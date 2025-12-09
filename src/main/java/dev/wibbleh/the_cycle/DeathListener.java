@@ -64,19 +64,19 @@ public class DeathListener implements Listener {
 
         aliveMap.put(id, false);
 
-        // Switch dead player to spectator mode on next tick to allow teleportation
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        // Respawn dead player after 3 seconds to facilitate teleporting back to lobby server
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!dead.isOnline()) {
-                plugin.getLogger().info("Player " + dead.getName() + " disconnected before spectator mode could be set.");
+                plugin.getLogger().info("Player " + dead.getName() + " disconnected before they could be respawned.");
                 return;
             }
             try {
-                dead.setGameMode(GameMode.SPECTATOR);
-                plugin.getLogger().info("Switched " + dead.getName() + " to spectator mode after death.");
+                dead.spigot().respawn();
+                plugin.getLogger().info("Respawned " + dead.getName() + " after hardcore mode death.");
             } catch (Exception e) {
-                plugin.getLogger().warning("Failed to switch dead player to spectator: " + e.getMessage());
+                plugin.getLogger().warning("Failed to respawn dead player: " + e.getMessage());
             }
-        });
+        }, 60L);
 
         // Mark this player to be moved to the lobby when they respawn (prevents them from being left behind)
         if (plugin instanceof Main m) {
@@ -84,7 +84,7 @@ public class DeathListener implements Listener {
                 m.addPendingLobbyMove(id);
                 plugin.getLogger().info("Marked player " + dead.getName() + " (" + id + ") for pending lobby move on respawn.");
             } catch (Exception ignored) {
-                plugin.getLogger().warning("Failed to mark pending lobby move for " + id + ": " + ignored.getMessage());
+                plugin.getLogger().warning("Failed to mark pending lobby move for player " + dead.getName() + " with ID " + id + ": " + ignored.getMessage());
             }
         }
 
@@ -100,17 +100,6 @@ public class DeathListener implements Listener {
         entry.put("drops", drops);
 
         deathRecap.add(entry);
-
-        // Send a chat message to all players when someone dies in hardcore
-        String deathMsg = "☠ " + dead.getName() + " died in hardcore";
-        Component deathComponent = Component.text(deathMsg);
-        Bukkit.getOnlinePlayers().forEach(p -> {
-            try {
-                p.sendMessage(deathComponent);
-            } catch (Exception e) {
-                plugin.getLogger().warning("Failed to send death message to player " + p.getName() + ": " + e.getMessage());
-            }
-        });
 
         if (enableActionbar) {
             String msg = "Player " + dead.getName() + " died — " + ev.getDeathMessage();
@@ -129,7 +118,7 @@ public class DeathListener implements Listener {
                         plugin.getLogger().info("All players dead, but shared-death is enabled; shared handler will trigger cycle.");
                         return;
                     }
-                    boolean cycleIfNoPlayers = plugin.getConfig().getBoolean("behavior.cycle_when_no_online_players", true);
+                    boolean cycleIfNoPlayers = plugin.getConfig().getBoolean("behavior.cycle_when_no_online_players", false);
                     if (Bukkit.getOnlinePlayers().isEmpty() && !cycleIfNoPlayers) {
                         plugin.getLogger().info("No online players and config prohibits cycling. Skipping.");
                         return;
