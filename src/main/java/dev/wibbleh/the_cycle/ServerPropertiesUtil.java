@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Properties;
 import java.util.logging.Logger;
 
@@ -47,7 +48,7 @@ public final class ServerPropertiesUtil {
             // If file doesn't exist, create it with the level-name property
             if (!propertiesFile.exists()) {
                 LOG.info("server.properties does not exist; creating with level-name=" + worldName);
-                try (var writer = new BufferedWriter(new FileWriter(propertiesFile, StandardCharsets.UTF_8))) {
+                try (var writer = Files.newBufferedWriter(serverPropertiesPath, StandardCharsets.UTF_8)) {
                     writer.write("# Minecraft server properties\n");
                     writer.write("# Updated by HardcoreCycle plugin\n");
                     writer.write("level-name=" + worldName + "\n");
@@ -60,20 +61,23 @@ public final class ServerPropertiesUtil {
             Files.copy(serverPropertiesPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
             LOG.fine("Created backup at: " + backupPath);
 
-            // Read the existing file line by line to preserve comments and formatting
-            var lines = Files.readAllLines(serverPropertiesPath, StandardCharsets.UTF_8);
+            // Process file line by line to find and update level-name property
+            // Using streaming API to avoid loading entire file into memory
+            var lines = new ArrayList<String>();
             boolean levelNameFound = false;
             
-            // Update the level-name line if it exists
-            for (int i = 0; i < lines.size(); i++) {
-                String line = lines.get(i);
-                String trimmed = line.trim();
-                
-                // Check if this line contains the level-name property (not a comment)
-                if (!trimmed.startsWith("#") && trimmed.startsWith("level-name=")) {
-                    lines.set(i, "level-name=" + worldName);
-                    levelNameFound = true;
-                    break;
+            try (var reader = Files.newBufferedReader(serverPropertiesPath, StandardCharsets.UTF_8)) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    
+                    // Check if this line contains the level-name property (not a comment)
+                    if (!levelNameFound && !trimmed.startsWith("#") && trimmed.startsWith("level-name=")) {
+                        lines.add("level-name=" + worldName);
+                        levelNameFound = true;
+                    } else {
+                        lines.add(line);
+                    }
                 }
             }
             
@@ -116,7 +120,7 @@ public final class ServerPropertiesUtil {
             return null;
         }
 
-        try (var reader = new BufferedReader(new FileReader(propertiesFile, StandardCharsets.UTF_8))) {
+        try (var reader = Files.newBufferedReader(serverPropertiesPath, StandardCharsets.UTF_8)) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String trimmed = line.trim();
