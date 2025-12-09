@@ -10,6 +10,7 @@ applyTo: '**/*.java'
 - Address code smells proactively during development rather than accumulating technical debt.
 - Focus on readability, maintainability, and performance when refactoring identified issues.
 - Use IDE / Code editor reported warnings and suggestions to catch common patterns early in development.
+- Always try to achieve maximum code coverage for any and all changes made.
 
 ## Best practices
 
