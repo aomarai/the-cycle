@@ -529,12 +529,33 @@ public class Main extends JavaPlugin implements Listener {
                 LOG.warning("Failed to create cycle restart marker: " + e.getMessage());
             }
             
-            // Schedule server restart after a short delay
+            // Calculate restart delay to ensure all players have time to be sent to lobby
+            // If pre-generation countdown is enabled, we need to wait for:
+            // 1. The countdown to complete (countdownSendToLobbySeconds)
+            // 2. A buffer for network transfer (2 seconds)
+            // Note: doGenerateWorld is called after delayBeforeGenerationSeconds, so we need to
+            // account for the remaining time in the countdown
+            long restartDelayTicks;
+            if (preGenerationCountdownEnabled && countdownSendToLobbySeconds > 0) {
+                // Calculate remaining countdown time from when doGenerateWorld is called
+                // The countdown starts immediately in performCycle, and doGenerateWorld is called
+                // after delayBeforeGenerationSeconds
+                int remainingCountdown = Math.max(0, countdownSendToLobbySeconds - delayBeforeGenerationSeconds);
+                // Add buffer time for network transfer (2 seconds = 40 ticks)
+                int bufferSeconds = 2;
+                restartDelayTicks = (remainingCountdown + bufferSeconds) * 20L;
+                LOG.info("Restart scheduled in " + (remainingCountdown + bufferSeconds) + " seconds to allow countdown completion and player transfer.");
+            } else {
+                // No countdown or countdown disabled, use default delay
+                restartDelayTicks = RESTART_DELAY_TICKS;
+            }
+            
+            // Schedule server restart after calculated delay
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 LOG.info("Initiating server restart for new world generation...");
                 // Restart the server - this works with most server management scripts (like start.sh with restart loop)
                 Bukkit.getServer().shutdown();
-            }, RESTART_DELAY_TICKS);
+            }, restartDelayTicks);
             
             return;
         }
