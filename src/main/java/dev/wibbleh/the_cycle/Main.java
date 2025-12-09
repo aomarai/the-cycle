@@ -83,6 +83,8 @@ public class Main extends JavaPlugin implements Listener {
     private static final String RPC_CHANNEL = "thecycle:rpc";
     private static final int MAX_RPC_QUEUE = 100;
     private static final int MAX_PERSISTENT_RPC_QUEUE = 100;
+    private static final long STARTUP_NOTIFICATION_DELAY_TICKS = 100L; // 5 seconds
+    private static final long RESTART_DELAY_TICKS = 100L; // 5 seconds
     
     // Outbound RPC queue used when the Bungee outgoing channel isn't available yet.
     private final Deque<byte[]> outboundRpcQueue = new ArrayDeque<>();
@@ -297,7 +299,7 @@ public class Main extends JavaPlugin implements Listener {
                 } catch (Exception e) {
                     LOG.warning("Failed to notify lobby on startup: " + e.getMessage());
                 }
-            }, 100L); // 5 seconds delay
+            }, STARTUP_NOTIFICATION_DELAY_TICKS);
         }
     }
 
@@ -532,7 +534,7 @@ public class Main extends JavaPlugin implements Listener {
                 LOG.info("Initiating server restart for new world generation...");
                 // Restart the server - this works with most server management scripts (like start.sh with restart loop)
                 Bukkit.getServer().shutdown();
-            }, 100L); // 5 seconds delay to allow cleanup
+            }, RESTART_DELAY_TICKS);
             
             return;
         }
