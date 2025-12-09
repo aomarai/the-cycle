@@ -6,13 +6,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Properties;
 import java.util.logging.Logger;
 
 /**
  * Utility for updating Minecraft server.properties file settings.
  * <p>
- * This utility provides thread-safe methods to update specific properties
+ * This utility provides methods to update specific properties
  * in the server.properties file, preserving comments and formatting where possible.
  */
 public final class ServerPropertiesUtil {
@@ -61,8 +60,7 @@ public final class ServerPropertiesUtil {
             Files.copy(serverPropertiesPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
             LOG.fine("Created backup at: " + backupPath);
 
-            // Process file line by line to find and update level-name property
-            // Using streaming API to avoid loading entire file into memory
+            // Read file line by line, updating level-name if found
             var lines = new ArrayList<String>();
             boolean levelNameFound = false;
             
