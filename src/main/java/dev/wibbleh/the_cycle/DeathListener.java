@@ -63,6 +63,16 @@ public class DeathListener implements Listener {
 
         aliveMap.put(id, false);
 
+        // Immediately switch dead player to spectator mode to allow teleportation
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            try {
+                dead.setGameMode(org.bukkit.GameMode.SPECTATOR);
+                plugin.getLogger().info("Switched " + dead.getName() + " to spectator mode after death.");
+            } catch (Exception e) {
+                plugin.getLogger().warning("Failed to switch dead player to spectator: " + e.getMessage());
+            }
+        });
+
         // Mark this player to be moved to the lobby when they respawn (prevents them from being left behind)
         if (plugin instanceof Main m) {
             try {
