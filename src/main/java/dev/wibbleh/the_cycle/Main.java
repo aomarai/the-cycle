@@ -36,6 +36,9 @@ public class Main extends JavaPlugin implements Listener {
     private static final long COUNTDOWN_FADE_IN_MILLIS = 0;
     private static final long COUNTDOWN_STAY_MILLIS = 1100;
     private static final long COUNTDOWN_FADE_OUT_MILLIS = 200;
+    private static final long CYCLE_START_FADE_IN_MILLIS = 500;
+    private static final long CYCLE_START_STAY_SECONDS = 3;
+    private static final long CYCLE_START_FADE_OUT_SECONDS = 1;
     
     // Scheduler timing constants
     private static final long COUNTDOWN_INITIAL_DELAY_TICKS = 0L;
@@ -1318,9 +1321,9 @@ public class Main extends JavaPlugin implements Listener {
                 title,
                 subtitle,
                 Title.Times.times(
-                    Duration.ofMillis(500),  // fade in
-                    Duration.ofSeconds(3),    // stay
-                    Duration.ofSeconds(1)     // fade out
+                    Duration.ofMillis(CYCLE_START_FADE_IN_MILLIS),
+                    Duration.ofSeconds(CYCLE_START_STAY_SECONDS),
+                    Duration.ofSeconds(CYCLE_START_FADE_OUT_SECONDS)
                 )
             );
             p.showTitle(titleScreen);

@@ -713,5 +713,61 @@ class MainTest {
         // Invoke the method - should return early without error
         assertDoesNotThrow(() -> plugin.scheduleCountdownThenMovePlayersToHardcore(5));
     }
+
+    @Test
+    void testShowCycleStartTitle() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        
+        lenient().when(mockPlayer.getName()).thenReturn(TEST_PLAYER_NAME);
+        
+        // Setup required fields
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
+        setPrivateField(plugin, "cycleNumber", new java.util.concurrent.atomic.AtomicInteger(5));
+        
+        // Access the private method
+        Method showCycleStartMethod = Main.class.getDeclaredMethod("showCycleStartTitle", org.bukkit.entity.Player.class);
+        showCycleStartMethod.setAccessible(true);
+        
+        // Invoke the method
+        showCycleStartMethod.invoke(plugin, mockPlayer);
+        
+        // Verify showTitle was called
+        verify(mockPlayer, times(1)).showTitle(any(net.kyori.adventure.title.Title.class));
+    }
+
+    @Test
+    void testShowCycleStartTitleWithNullPlayer() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
+        
+        // Access the private method
+        Method showCycleStartMethod = Main.class.getDeclaredMethod("showCycleStartTitle", org.bukkit.entity.Player.class);
+        showCycleStartMethod.setAccessible(true);
+        
+        // Should handle null player without crashing
+        assertDoesNotThrow(() -> showCycleStartMethod.invoke(plugin, (Object) null));
+    }
+
+    @Test
+    void testShowCycleStartTitleHandlesException() throws Exception {
+        Main plugin = mock(Main.class, CALLS_REAL_METHODS);
+        org.bukkit.entity.Player mockPlayer = mock(org.bukkit.entity.Player.class);
+        
+        when(mockPlayer.getName()).thenReturn("FailingPlayer");
+        doThrow(new RuntimeException("Title display failed")).when(mockPlayer).showTitle(any(net.kyori.adventure.title.Title.class));
+        
+        // Setup required fields
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
+        setPrivateField(plugin, "cycleNumber", new java.util.concurrent.atomic.AtomicInteger(3));
+        
+        // Access the private method
+        Method showCycleStartMethod = Main.class.getDeclaredMethod("showCycleStartTitle", org.bukkit.entity.Player.class);
+        showCycleStartMethod.setAccessible(true);
+        
+        // Should not throw exception - exceptions are caught
+        assertDoesNotThrow(() -> showCycleStartMethod.invoke(plugin, mockPlayer));
+    }
 }
 
