@@ -5,13 +5,16 @@ api-version: 1.21
 commands:
   cycle:
     description: Manage and trigger hardcore world cycles
-    usage: /cycle setcycle <n> | /cycle cycle-now | /cycle status
+    usage: /cycle <setcycle|cycle-now|status|info|reload|queue|players>
     permission: thecycle.cycle
     permission-message: You do not have permission to use that command.
 
 permissions:
   thecycle.cycle:
     description: Allows running /cycle and forwarding cycle requests from lobby to hardcore
+    default: op
+  thecycle.admin:
+    description: Allows access to debug commands (info, reload, queue, players)
     default: op
 
 channels:

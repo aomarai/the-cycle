@@ -119,7 +119,36 @@ behavior:
 |---------|-------------|------------|
 | `/cycle cycle-now` | Request immediate world cycle | `thecycle.cycle` |
 | `/cycle setcycle <n>` | Set the current cycle number | `thecycle.cycle` |
-| `/cycle status` | Display current cycle and player counts | None |
+| `/cycle status` | Display detailed server status (cycle, players, attempts, wins) | None |
+| `/cycle info` | Show detailed debug information about server configuration | `thecycle.admin` |
+| `/cycle reload` | Reload plugin configuration | `thecycle.admin` |
+| `/cycle queue` | Display RPC queue status and pending moves | `thecycle.admin` |
+| `/cycle players` | Show detailed player information and cycle participation | `thecycle.admin` |
+
+### Admin Commands
+
+The following commands require the `thecycle.admin` permission:
+
+- **info** - Shows detailed server information including:
+  - Server role (lobby/hardcore)
+  - Cycle number, attempts, and total wins
+  - Online player count
+  - Hardcore server name
+  - Bukkit and plugin versions
+
+- **reload** - Reloads the plugin configuration from disk
+  - Note: Some settings require a server restart to take full effect
+
+- **queue** - Displays RPC queue status including:
+  - Outbound RPC queue size
+  - Persistent RPC queue size
+  - Pending lobby moves
+  - Pending hardcore moves
+
+- **players** - Shows detailed player information:
+  - List of online players
+  - Current world for each player
+  - Whether each player is in the current cycle
 
 ## How It Works
 
