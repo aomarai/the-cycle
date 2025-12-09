@@ -1,6 +1,7 @@
 package dev.wibbleh.the_cycle;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -94,13 +95,20 @@ public final class ServerPropertiesUtil {
                 while ((line = reader.readLine()) != null) {
                     String trimmed = line.trim();
                     
-                    // Check if this line contains the level-name property (not a comment)
-                    if (!levelNameFound && !trimmed.startsWith("#") && trimmed.startsWith("level-name=")) {
-                        lines.add("level-name=" + worldName);
-                        levelNameFound = true;
-                    } else if (seed != null && !levelSeedFound && !trimmed.startsWith("#") && trimmed.startsWith("level-seed=")) {
-                        lines.add("level-seed=" + seed);
-                        levelSeedFound = true;
+                    // Check if this line contains the level-name or level-seed property (not a comment)
+                    if (!trimmed.isEmpty() && !trimmed.startsWith("#") && trimmed.contains("=")) {
+                        int eqIdx = trimmed.indexOf('=');
+                        String key = trimmed.substring(0, eqIdx).trim();
+                        
+                        if (!levelNameFound && "level-name".equals(key)) {
+                            lines.add("level-name=" + worldName);
+                            levelNameFound = true;
+                        } else if (seed != null && !levelSeedFound && "level-seed".equals(key)) {
+                            lines.add("level-seed=" + seed);
+                            levelSeedFound = true;
+                        } else {
+                            lines.add(line);
+                        }
                     } else {
                         lines.add(line);
                     }
@@ -156,9 +164,13 @@ public final class ServerPropertiesUtil {
             String line;
             while ((line = reader.readLine()) != null) {
                 String trimmed = line.trim();
-                if (!trimmed.startsWith("#") && trimmed.startsWith("level-name=")) {
-                    String value = trimmed.substring("level-name=".length()).trim();
-                    return value.isEmpty() ? null : value;
+                if (!trimmed.isEmpty() && !trimmed.startsWith("#") && trimmed.contains("=")) {
+                    int eqIdx = trimmed.indexOf('=');
+                    String key = trimmed.substring(0, eqIdx).trim();
+                    if ("level-name".equals(key)) {
+                        String value = trimmed.substring(eqIdx + 1).trim();
+                        return value.isEmpty() ? null : value;
+                    }
                 }
             }
         } catch (IOException e) {

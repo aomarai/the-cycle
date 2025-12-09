@@ -128,6 +128,8 @@ public class Main extends JavaPlugin implements Listener {
     private final List<RpcQueueStorage.QueuedRpc> persistentRpcQueue = Collections.synchronizedList(new ArrayList<>());
     // Task ID for periodic RPC retry task
     private int persistentRpcRetryTaskId = -1;
+    // Marker file to indicate a cycle-triggered restart (deleted after processing)
+    private File cycleRestartMarkerFile;
 
     /**
      * Plugin enable lifecycle method. Loads configuration, wires helper services,
@@ -150,6 +152,7 @@ public class Main extends JavaPlugin implements Listener {
         // ensure data folder and pending moves file
         pendingMovesFile = new File(getDataFolder(), "pending_moves.json");
         persistentRpcQueueFile = new File(getDataFolder(), "failed_rpcs.json");
+        cycleRestartMarkerFile = new File(getDataFolder(), "cycle_restart.marker");
 
         // Read server role (default: hardcore). If role is "lobby" the plugin will not create or delete worlds.
         String role = cfg.getString("server.role", "hardcore").trim().toLowerCase(Locale.ROOT);
@@ -274,9 +277,19 @@ public class Main extends JavaPlugin implements Listener {
         String roleLabel = isHardcoreBackend ? "hardcore" : "lobby";
         LOG.info("TheCyclePlugin enabled — cycle #" + cycleNumber.get() + "; role=" + roleLabel + ", bungeeRegistered=" + registeredBungeeChannel);
         
-        // If this is a hardcore backend that just started, check if we should notify the lobby
-        // This happens when the server was restarted after a cycle to load the new world
-        if (isHardcoreBackend && restartOnCycle) {
+        // If this is a hardcore backend that just restarted after a cycle, notify the lobby
+        // Check for the marker file that was created before the restart
+        if (isHardcoreBackend && restartOnCycle && cycleRestartMarkerFile.exists()) {
+            LOG.info("Detected cycle-triggered restart marker; will notify lobby that world is ready.");
+            // Delete the marker file immediately to prevent duplicate notifications
+            try {
+                if (!cycleRestartMarkerFile.delete()) {
+                    LOG.warning("Failed to delete cycle restart marker file.");
+                }
+            } catch (Exception e) {
+                LOG.warning("Error deleting cycle restart marker: " + e.getMessage());
+            }
+            
             // Schedule notification to lobby after a short delay to ensure server is fully ready
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 try {
@@ -485,18 +498,41 @@ public class Main extends JavaPlugin implements Listener {
                 } catch (Exception ignored) {}
             });
             
-            // Schedule deletion of previous world before restart
+            // Unload and schedule deletion of previous world before restart
             if (next > 1 && cfg.getBoolean("behavior.delete_previous_worlds", true)) {
                 String prevWorldName = "hardcore_cycle_" + (next - 1);
+                World prevWorld = Bukkit.getWorld(prevWorldName);
+                
+                // Unload the world first to avoid save errors during shutdown
+                if (prevWorld != null) {
+                    LOG.info("Unloading previous world before restart: " + prevWorldName);
+                    boolean unloaded = Bukkit.unloadWorld(prevWorld, false);
+                    if (!unloaded) {
+                        LOG.warning("Failed to unload world " + prevWorldName + " before restart.");
+                    }
+                }
+                
+                // Schedule deletion (will happen after unload or on next startup if deferred)
                 worldDeletionService.scheduleDeleteWorldFolder(prevWorldName);
             }
             
-            // Schedule server restart after a short delay to allow players to see the message
+            // Create marker file to indicate this is a cycle-triggered restart
+            try {
+                if (cycleRestartMarkerFile.createNewFile()) {
+                    LOG.info("Created cycle restart marker file.");
+                } else {
+                    LOG.warning("Cycle restart marker file already exists.");
+                }
+            } catch (Exception e) {
+                LOG.warning("Failed to create cycle restart marker: " + e.getMessage());
+            }
+            
+            // Schedule server restart after a short delay to allow world unload and cleanup
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 LOG.info("Initiating server restart for new world generation...");
                 // Restart the server - this works with most server management scripts (like start.sh with restart loop)
                 Bukkit.getServer().shutdown();
-            }, 60L); // 3 seconds delay
+            }, 100L); // 5 seconds delay to allow cleanup
             
             return;
         }
