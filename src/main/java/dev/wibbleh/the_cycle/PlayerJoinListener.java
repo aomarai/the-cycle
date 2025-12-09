@@ -37,12 +37,20 @@ public class PlayerJoinListener implements Listener {
                 // Check if they're in a hardcore world
                 String worldName = p.getWorld().getName();
                 if (worldName.startsWith("hardcore_cycle_")) {
-                    plugin.getLogger().info("Player " + p.getName() + " joined during active cycle; moving to lobby.");
-                    // Schedule move to lobby on next tick to let join complete
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        p.sendMessage("§eYou joined during an active cycle. You'll join the next cycle when it starts.");
-                        plugin.sendPlayerToLobby(p);
-                    });
+                    // Only kick if there are other players already in the cycle
+                    // If no one is in the cycle yet, this is likely a fresh server start - let them join
+                    if (plugin.hasPlayersInCurrentCycle()) {
+                        plugin.getLogger().info("Player " + p.getName() + " joined during active cycle; moving to lobby.");
+                        // Schedule move to lobby on next tick to let join complete
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            p.sendMessage("§eYou joined during an active cycle. You'll join the next cycle when it starts.");
+                            plugin.sendPlayerToLobby(p);
+                        });
+                    } else {
+                        // No players in cycle yet - this is a fresh start, add them to the cycle
+                        plugin.getLogger().info("Player " + p.getName() + " joined fresh hardcore world; adding to current cycle.");
+                        plugin.addPlayerToCurrentCycle(p.getUniqueId());
+                    }
                 }
             }
         } else {

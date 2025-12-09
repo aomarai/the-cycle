@@ -16,6 +16,13 @@ behavior:
   # When true, the lobby will automatically request a new cycle from the hardcore server
   # when players are waiting and no cycle is active. Default: true
   auto_start_cycles: true
+  # Restart server after updating server.properties for new cycle (hardcore server only).
+  # When true, the server will restart after updating server.properties to ensure
+  # the new world is properly loaded as the main world. This is the recommended approach
+  # for reliable world cycling. When false, the plugin attempts to create worlds in-memory
+  # which may not work correctly after deleting the default world.
+  # Default: true
+  restart_on_cycle: true
 
 # Server role controls whether this instance is responsible for creating/deleting worlds.
 # Values: "hardcore" (the backend that hosts the cyclical hardcore worlds) or "lobby"
@@ -28,6 +35,19 @@ server:
   hardcore: ""
   # Optional shared secret for RPC forwarding. If set, forwarded RPCs must include this secret.
   rpc_secret: ""
+  # Seed configuration: when true, each new hardcore world receives a new random seed.
+  # When false, the configured seed (if non-zero) will be used for all worlds.
+  # Default: true (randomize seed for each cycle)
+  randomize_seed: true
+  # Optional configured seed (only used when randomize_seed is false and non-zero).
+  # When randomize_seed is false and this is 0, Minecraft will choose the seed.
+  # Default: 0
+  seed: 0
+  # Path to server.properties file (relative to server root directory).
+  # The plugin will update the level-name property in this file to ensure the
+  # correct cycle world is loaded on server restart.
+  # Default: "server.properties"
+  properties_path: "server.properties"
 
 # Lobby configuration (optional)
 lobby:
