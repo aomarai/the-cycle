@@ -66,6 +66,10 @@ public class DeathListener implements Listener {
 
         // Switch dead player to spectator mode on next tick to allow teleportation
         Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!dead.isOnline()) {
+                plugin.getLogger().info("Player " + dead.getName() + " disconnected before spectator mode could be set.");
+                return;
+            }
             try {
                 dead.setGameMode(GameMode.SPECTATOR);
                 plugin.getLogger().info("Switched " + dead.getName() + " to spectator mode after death.");

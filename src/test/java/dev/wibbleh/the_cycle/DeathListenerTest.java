@@ -273,6 +273,7 @@ class DeathListenerTest {
             mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn((Collection) onlinePlayers);
             mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
             lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
+            lenient().when(mockPlayer.isOnline()).thenReturn(true);
             
             // Capture the runnable passed to runTask so we can execute it
             when(mockScheduler.runTask(eq(mockPlugin), any(Runnable.class))).thenAnswer(invocation -> {
@@ -285,6 +286,31 @@ class DeathListenerTest {
             
             // Verify that the player's game mode was set to SPECTATOR
             verify(mockPlayer, times(1)).setGameMode(GameMode.SPECTATOR);
+        }
+    }
+
+    @Test
+    void testOnPlayerDeathSkipsSpectatorModeIfPlayerOffline() {
+        DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
+        
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            List<Player> onlinePlayers = Arrays.asList(mockPlayer);
+            mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn((Collection) onlinePlayers);
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
+            lenient().when(mockPlayer.isOnline()).thenReturn(false);
+            
+            // Capture the runnable passed to runTask so we can execute it
+            when(mockScheduler.runTask(eq(mockPlugin), any(Runnable.class))).thenAnswer(invocation -> {
+                Runnable runnable = invocation.getArgument(1);
+                runnable.run();
+                return mockTask;
+            });
+            
+            listener.onPlayerDeath(mockEvent);
+            
+            // Verify that the player's game mode was NOT set since they're offline
+            verify(mockPlayer, never()).setGameMode(any());
         }
     }
 }
