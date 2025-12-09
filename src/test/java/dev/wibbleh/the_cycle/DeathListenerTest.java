@@ -284,7 +284,7 @@ class DeathListenerTest {
             lenient().when(mockPlayer.isOnline()).thenReturn(true);
             
             // Capture the runnable passed to runTaskLater so we can execute it
-            when(mockScheduler.runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L))).thenAnswer(invocation -> {
+            when(mockScheduler.runTaskLater(eq(mockPlugin), any(Runnable.class), eq(200L))).thenAnswer(invocation -> {
                 Runnable runnable = invocation.getArgument(1);
                 runnable.run();
                 return mockTask;
@@ -293,7 +293,7 @@ class DeathListenerTest {
             listener.onPlayerDeath(mockEvent);
             
             // Verify that a delayed task was scheduled to respawn the player
-            verify(mockScheduler, times(1)).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L));
+            verify(mockScheduler, times(1)).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(200L));
             // Verify that respawn was called
             verify(mockSpigot, times(1)).respawn();
         }
@@ -315,7 +315,7 @@ class DeathListenerTest {
             lenient().when(mockPlayer.isOnline()).thenReturn(false);
             
             // Capture the runnable passed to runTaskLater so we can execute it
-            when(mockScheduler.runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L))).thenAnswer(invocation -> {
+            when(mockScheduler.runTaskLater(eq(mockPlugin), any(Runnable.class), eq(200L))).thenAnswer(invocation -> {
                 Runnable runnable = invocation.getArgument(1);
                 runnable.run();
                 return mockTask;
@@ -324,7 +324,7 @@ class DeathListenerTest {
             listener.onPlayerDeath(mockEvent);
             
             // Verify that a delayed task was scheduled
-            verify(mockScheduler, times(1)).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L));
+            verify(mockScheduler, times(1)).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(200L));
             // Verify that respawn was NOT called since player is offline
             verify(mockSpigot, never()).respawn();
         }
