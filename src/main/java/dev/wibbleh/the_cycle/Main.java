@@ -13,7 +13,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
-import org.bukkit.scoreboard.Scoreboard;
 import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.NotNull;
 
@@ -670,16 +669,16 @@ public class Main extends JavaPlugin implements Listener {
      */
     private boolean switchDeadPlayerToSpectator(Player p) {
         if (p == null || !p.isDead()) {
-            return true; // Player is not dead, no action needed
+            return false; // Player is not dead, no action needed
         }
         
         try {
             p.setGameMode(org.bukkit.GameMode.SPECTATOR);
             LOG.info("Player " + p.getName() + " was dead; switched to spectator mode for teleportation.");
-            return true;
+            return false;
         } catch (Exception e) {
             LOG.warning("Failed to switch dead player to spectator mode: " + e.getMessage());
-            return false;
+            return true;
         }
     }
 
@@ -694,7 +693,7 @@ public class Main extends JavaPlugin implements Listener {
     public boolean sendPlayerToLobby(Player p) {
         if (p == null) return false;
         if (p.isDead()) {
-            if (!switchDeadPlayerToSpectator(p)) {
+            if (switchDeadPlayerToSpectator(p)) {
                 // Fallback: mark pending move and wait for respawn
                 pendingLobbyMoves.add(p.getUniqueId());
                 savePendingMovesAsync();
@@ -884,7 +883,7 @@ public class Main extends JavaPlugin implements Listener {
     public boolean sendPlayerToServer(org.bukkit.entity.Player p, String serverName) {
         if (p == null || serverName == null || serverName.isEmpty()) return false;
         if (p.isDead()) {
-            if (!switchDeadPlayerToSpectator(p)) {
+            if (switchDeadPlayerToSpectator(p)) {
                 // Fallback: mark pending move and wait for respawn
                 pendingHardcoreMoves.add(p.getUniqueId());
                 savePendingMovesAsync();

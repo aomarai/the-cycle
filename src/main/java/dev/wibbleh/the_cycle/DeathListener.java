@@ -76,7 +76,7 @@ public class DeathListener implements Listener {
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to respawn dead player: " + e.getMessage());
             }
-        }, 60L);
+        }, 200L);
 
         // Mark this player to be moved to the lobby when they respawn (prevents them from being left behind)
         if (plugin instanceof Main m) {
