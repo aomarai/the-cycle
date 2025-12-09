@@ -267,6 +267,17 @@ class CommandHandlerTest {
     }
 
     @Test
+    void testHandleQueueNoPermission() {
+        when(mockCommand.getName()).thenReturn("cycle");
+        when(mockSender.hasPermission("thecycle.admin")).thenReturn(false);
+
+        boolean result = handler.handle(mockSender, mockCommand, "cycle", new String[]{"queue"});
+
+        assertTrue(result);
+        assertTrue(sentMessages.get(0).contains("permission"));
+    }
+
+    @Test
     void testHandlePlayers() {
         when(mockCommand.getName()).thenReturn("cycle");
         when(mockSender.hasPermission("thecycle.admin")).thenReturn(true);
@@ -281,5 +292,16 @@ class CommandHandlerTest {
             String allMessages = String.join(" ", sentMessages);
             assertTrue(allMessages.contains("Player"));
         }
+    }
+
+    @Test
+    void testHandlePlayersNoPermission() {
+        when(mockCommand.getName()).thenReturn("cycle");
+        when(mockSender.hasPermission("thecycle.admin")).thenReturn(false);
+
+        boolean result = handler.handle(mockSender, mockCommand, "cycle", new String[]{"players"});
+
+        assertTrue(result);
+        assertTrue(sentMessages.get(0).contains("permission"));
     }
 }
