@@ -1545,7 +1545,7 @@ public class Main extends JavaPlugin implements Listener {
      * Get the count of pending lobby moves.
      * @return the number of pending lobby moves
      */
-    public int getPendingLobbyMovesCount() {
+    public synchronized int getPendingLobbyMovesCount() {
         return pendingLobbyMoves.size();
     }
 
@@ -1553,7 +1553,7 @@ public class Main extends JavaPlugin implements Listener {
      * Get the count of pending hardcore moves.
      * @return the number of pending hardcore moves
      */
-    public int getPendingHardcoreMovesCount() {
+    public synchronized int getPendingHardcoreMovesCount() {
         return pendingHardcoreMoves.size();
     }
 }
