@@ -201,12 +201,20 @@ class PlayerJoinListenerTest {
     void testPlayerChangedToHardcoreWorldAddedToCycle() {
         // Setup - player changes to hardcore world
         when(mockWorld.getName()).thenReturn("hardcore_cycle_10");
+        lenient().when(mockPlayer.isOnline()).thenReturn(true);
 
-        // Execute
-        listener.onPlayerChangedWorld(mockChangeWorldEvent);
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            lenient().when(mockScheduler.runTaskLater(eq(mockPlugin), any(Runnable.class), eq(10L))).thenReturn(mockTask);
 
-        // Verify - player added to current cycle
-        verify(mockPlugin).addPlayerToCurrentCycle(playerUuid);
+            // Execute
+            listener.onPlayerChangedWorld(mockChangeWorldEvent);
+
+            // Verify - player added to current cycle
+            verify(mockPlugin).addPlayerToCurrentCycle(playerUuid);
+            // Verify scheduler was called to show title with delay
+            verify(mockScheduler).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(10L));
+        }
     }
 
     @Test
@@ -280,6 +288,58 @@ class PlayerJoinListenerTest {
             // Verify both moved to lobby
             verify(mockPlugin).sendPlayerToLobby(mockPlayer);
             verify(mockPlugin).sendPlayerToLobby(player2);
+        }
+    }
+
+    @Test
+    void testPlayerChangedToHardcoreWorldShowsCycleStartTitle() {
+        // Setup - player changes to hardcore world
+        when(mockWorld.getName()).thenReturn("hardcore_cycle_10");
+        when(mockPlayer.isOnline()).thenReturn(true);
+
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            
+            // Capture the runnable to execute it
+            ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+            when(mockScheduler.runTaskLater(eq(mockPlugin), runnableCaptor.capture(), eq(10L))).thenReturn(mockTask);
+
+            // Execute
+            listener.onPlayerChangedWorld(mockChangeWorldEvent);
+
+            // Verify scheduler was called
+            verify(mockScheduler).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(10L));
+            
+            // Execute the scheduled task to trigger the title display
+            Runnable scheduledTask = runnableCaptor.getValue();
+            scheduledTask.run();
+            
+            // Verify the cycle start title was shown
+            verify(mockPlugin).showCycleStartTitleToPlayer(mockPlayer);
+        }
+    }
+
+    @Test
+    void testPlayerChangedToHardcoreWorldDoesNotShowTitleIfOffline() {
+        // Setup - player changes to hardcore world but goes offline before title shows
+        when(mockWorld.getName()).thenReturn("hardcore_cycle_10");
+        when(mockPlayer.isOnline()).thenReturn(false); // Player offline
+
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            
+            ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+            when(mockScheduler.runTaskLater(eq(mockPlugin), runnableCaptor.capture(), eq(10L))).thenReturn(mockTask);
+
+            // Execute
+            listener.onPlayerChangedWorld(mockChangeWorldEvent);
+
+            // Execute the scheduled task
+            Runnable scheduledTask = runnableCaptor.getValue();
+            scheduledTask.run();
+            
+            // Verify title was NOT shown (player offline)
+            verify(mockPlugin, never()).showCycleStartTitleToPlayer(any(Player.class));
         }
     }
 }

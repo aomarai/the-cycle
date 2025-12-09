@@ -83,6 +83,7 @@ public class PlayerJoinListener implements Listener {
 
     /**
      * When a player changes to a hardcore world, track them as part of the current cycle.
+     * Show the cycle start title when they spawn in the hardcore world.
      */
     @EventHandler
     public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
@@ -93,6 +94,14 @@ public class PlayerJoinListener implements Listener {
         if (newWorldName.startsWith("hardcore_cycle_")) {
             plugin.addPlayerToCurrentCycle(p.getUniqueId());
             plugin.getLogger().info("Player " + p.getName() + " entered hardcore world, added to current cycle.");
+            
+            // Show cycle start title now that player is in the hardcore world
+            // Schedule it with a small delay to ensure player is fully loaded
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (p.isOnline() && p.getWorld().getName().equals(newWorldName)) {
+                    plugin.showCycleStartTitleToPlayer(p);
+                }
+            }, 10L); // 0.5 second delay
         }
     }
 }

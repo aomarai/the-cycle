@@ -1311,6 +1311,14 @@ public class Main extends JavaPlugin implements Listener {
 
     /**
      * Show a large title screen to a player when they're about to enter a new cycle.
+     * Public wrapper method for external access (e.g., from PlayerJoinListener).
+     */
+    public void showCycleStartTitleToPlayer(Player p) {
+        showCycleStartTitle(p);
+    }
+
+    /**
+     * Show a large title screen to a player when they're about to enter a new cycle.
      */
     private void showCycleStartTitle(Player p) {
         if (p == null) return;
