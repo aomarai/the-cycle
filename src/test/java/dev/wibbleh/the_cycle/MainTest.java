@@ -32,6 +32,13 @@ import static org.mockito.Mockito.lenient;
 @ExtendWith(MockitoExtension.class)
 class MainTest {
 
+    private static final String TEST_LOGGER_NAME = "test";
+    private static final String TEST_PLAYER_NAME = "TestPlayer";
+    private static final String TEST_HARDCORE_SERVER = "hardcore";
+    private static final int TEST_CYCLE_NUMBER = 42;
+    private static final long COUNTDOWN_INITIAL_DELAY_TICKS = 0L;
+    private static final long TICKS_PER_SECOND = 20L;
+
     @Mock
     private FileConfiguration mockConfig;
 
@@ -523,7 +530,7 @@ class MainTest {
         lenient().when(mockPlayer2.getName()).thenReturn("Player2");
         
         // Setup logger
-        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
         
         // Access the private method
         Method showTitleMethod = Main.class.getDeclaredMethod("showWorldCycleCompleteTitle", int.class);
@@ -534,7 +541,7 @@ class MainTest {
             bukkitMock.when(Bukkit::getOnlinePlayers).thenReturn(Arrays.asList(mockPlayer1, mockPlayer2));
             
             // Invoke the method
-            showTitleMethod.invoke(plugin, 42);
+            showTitleMethod.invoke(plugin, TEST_CYCLE_NUMBER);
             
             // Verify showTitle was called on both players
             verify(mockPlayer1, times(1)).showTitle(any(net.kyori.adventure.title.Title.class));
@@ -551,7 +558,7 @@ class MainTest {
         doThrow(new RuntimeException("Title display failed")).when(mockPlayer).showTitle(any(net.kyori.adventure.title.Title.class));
         
         // Setup logger
-        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
         
         // Access the private method
         Method showTitleMethod = Main.class.getDeclaredMethod("showWorldCycleCompleteTitle", int.class);
@@ -572,11 +579,11 @@ class MainTest {
         UUID playerId = UUID.randomUUID();
         
         lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
-        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.getName()).thenReturn(TEST_PLAYER_NAME);
         lenient().when(mockPlayer.isDead()).thenReturn(false);
         
         // Setup required fields
-        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
         setPrivateField(plugin, "pendingLobbyMoves", Collections.synchronizedSet(new HashSet<>()));
         setPrivateField(plugin, "countdownBroadcastToAll", true);
         setPrivateField(plugin, "lastCycleRequester", null);
@@ -601,11 +608,11 @@ class MainTest {
         UUID playerId = UUID.randomUUID();
         
         lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
-        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.getName()).thenReturn(TEST_PLAYER_NAME);
         lenient().when(mockPlayer.isDead()).thenReturn(false);
         
         // Setup required fields
-        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
         setPrivateField(plugin, "pendingLobbyMoves", Collections.synchronizedSet(new HashSet<>()));
         setPrivateField(plugin, "countdownBroadcastToAll", true);
         setPrivateField(plugin, "lastCycleRequester", null);
@@ -622,7 +629,7 @@ class MainTest {
             plugin.scheduleCountdownThenSendPlayersToLobby(Arrays.asList(mockPlayer), 5);
             
             // Should schedule a task
-            verify(mockScheduler, times(1)).runTaskTimer(eq(plugin), any(Runnable.class), eq(0L), eq(20L));
+            verify(mockScheduler, times(1)).runTaskTimer(eq(plugin), any(Runnable.class), eq(COUNTDOWN_INITIAL_DELAY_TICKS), eq(TICKS_PER_SECOND));
         }
     }
 
@@ -633,15 +640,15 @@ class MainTest {
         UUID playerId = UUID.randomUUID();
         
         lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
-        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.getName()).thenReturn(TEST_PLAYER_NAME);
         lenient().when(mockPlayer.isDead()).thenReturn(false);
         
         // Setup required fields
-        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
         setPrivateField(plugin, "pendingHardcoreMoves", Collections.synchronizedSet(new HashSet<>()));
         setPrivateField(plugin, "countdownBroadcastToAll", true);
         setPrivateField(plugin, "lastCycleRequester", null);
-        setPrivateField(plugin, "hardcoreServerName", "hardcore");
+        setPrivateField(plugin, "hardcoreServerName", TEST_HARDCORE_SERVER);
         setPrivateField(plugin, "cycleStartPending", new java.util.concurrent.atomic.AtomicBoolean(true));
         setPrivateField(plugin, "cycleNumber", new java.util.concurrent.atomic.AtomicInteger(1));
         
@@ -667,15 +674,15 @@ class MainTest {
         UUID playerId = UUID.randomUUID();
         
         lenient().when(mockPlayer.getUniqueId()).thenReturn(playerId);
-        lenient().when(mockPlayer.getName()).thenReturn("TestPlayer");
+        lenient().when(mockPlayer.getName()).thenReturn(TEST_PLAYER_NAME);
         lenient().when(mockPlayer.isDead()).thenReturn(false);
         
         // Setup required fields
-        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
         setPrivateField(plugin, "pendingHardcoreMoves", Collections.synchronizedSet(new HashSet<>()));
         setPrivateField(plugin, "countdownBroadcastToAll", true);
         setPrivateField(plugin, "lastCycleRequester", null);
-        setPrivateField(plugin, "hardcoreServerName", "hardcore");
+        setPrivateField(plugin, "hardcoreServerName", TEST_HARDCORE_SERVER);
         setPrivateField(plugin, "cycleStartPending", new java.util.concurrent.atomic.AtomicBoolean(true));
         
         // Mock scheduler
@@ -690,7 +697,7 @@ class MainTest {
             plugin.scheduleCountdownThenMovePlayersToHardcore(3);
             
             // Should schedule a task
-            verify(mockScheduler, times(1)).runTaskTimer(eq(plugin), any(Runnable.class), eq(0L), eq(20L));
+            verify(mockScheduler, times(1)).runTaskTimer(eq(plugin), any(Runnable.class), eq(COUNTDOWN_INITIAL_DELAY_TICKS), eq(TICKS_PER_SECOND));
         }
     }
 
@@ -699,7 +706,7 @@ class MainTest {
         Main plugin = mock(Main.class, CALLS_REAL_METHODS);
         
         // Setup required fields with empty server name
-        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger("test"));
+        lenient().when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getLogger(TEST_LOGGER_NAME));
         setPrivateField(plugin, "hardcoreServerName", "");
         setPrivateField(plugin, "cycleStartPending", new java.util.concurrent.atomic.AtomicBoolean(true));
         

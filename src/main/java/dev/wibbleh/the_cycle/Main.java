@@ -29,6 +29,18 @@ public class Main extends JavaPlugin implements Listener {
     private static final int GRACE_PERIOD_TICKS = 60; // 3 seconds
     private static final int AUTO_START_DELAY_TICKS = 40; // 2 seconds
     
+    // Title screen timing constants
+    private static final long CYCLE_COMPLETE_FADE_IN_MILLIS = 500;
+    private static final long CYCLE_COMPLETE_STAY_SECONDS = 2;
+    private static final long CYCLE_COMPLETE_FADE_OUT_SECONDS = 1;
+    private static final long COUNTDOWN_FADE_IN_MILLIS = 0;
+    private static final long COUNTDOWN_STAY_MILLIS = 1100;
+    private static final long COUNTDOWN_FADE_OUT_MILLIS = 200;
+    
+    // Scheduler timing constants
+    private static final long COUNTDOWN_INITIAL_DELAY_TICKS = 0L;
+    private static final long TICKS_PER_SECOND = 20L;
+    
     private final AtomicInteger cycleNumber = new AtomicInteger(1);
     // Attempt counter: number of cycles attempted before beating Minecraft (killing ender dragon)
     private final AtomicInteger attemptsSinceLastWin = new AtomicInteger(0);
@@ -600,9 +612,9 @@ public class Main extends JavaPlugin implements Listener {
             title,
             subtitle,
             Title.Times.times(
-                Duration.ofMillis(500),  // fade in
-                Duration.ofSeconds(2),    // stay
-                Duration.ofSeconds(1)     // fade out
+                Duration.ofMillis(CYCLE_COMPLETE_FADE_IN_MILLIS),
+                Duration.ofSeconds(CYCLE_COMPLETE_STAY_SECONDS),
+                Duration.ofSeconds(CYCLE_COMPLETE_FADE_OUT_SECONDS)
             )
         );
         
@@ -613,6 +625,18 @@ public class Main extends JavaPlugin implements Listener {
                 LOG.warning("Failed to show cycle complete title to " + p.getName() + ": " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Create shared title times for countdown displays.
+     * @return Title.Times configured for countdown animations
+     */
+    private static Title.Times createCountdownTitleTimes() {
+        return Title.Times.times(
+            Duration.ofMillis(COUNTDOWN_FADE_IN_MILLIS),
+            Duration.ofMillis(COUNTDOWN_STAY_MILLIS),
+            Duration.ofMillis(COUNTDOWN_FADE_OUT_MILLIS)
+        );
     }
 
     /**
@@ -1164,11 +1188,7 @@ public class Main extends JavaPlugin implements Listener {
         final int total = seconds;
         // Create static title component once outside the loop for reuse
         final Component lobbyTitleStatic = Component.text("Returning to Lobby", NamedTextColor.YELLOW);
-        final Title.Times titleTimes = Title.Times.times(
-            Duration.ofMillis(0),     // fade in
-            Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
-            Duration.ofMillis(200)    // fade out
-        );
+        final Title.Times titleTimes = createCountdownTitleTimes();
         new org.bukkit.scheduler.BukkitRunnable() {
              int remaining = total;
              @Override
@@ -1204,7 +1224,7 @@ public class Main extends JavaPlugin implements Listener {
                 }
                 remaining--;
             }
-        }.runTaskTimer(this, 0L, 20L);
+        }.runTaskTimer(this, COUNTDOWN_INITIAL_DELAY_TICKS, TICKS_PER_SECOND);
     }
 
     /**
@@ -1247,11 +1267,7 @@ public class Main extends JavaPlugin implements Listener {
         final int total = seconds;
         // Create static title component once outside the loop for reuse
         final Component hardcoreTitleStatic = Component.text("Entering Hardcore", NamedTextColor.RED);
-        final Title.Times titleTimes = Title.Times.times(
-            Duration.ofMillis(0),     // fade in
-            Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
-            Duration.ofMillis(200)    // fade out
-        );
+        final Title.Times titleTimes = createCountdownTitleTimes();
         new org.bukkit.scheduler.BukkitRunnable() {
             int remaining = total;
             @Override
@@ -1287,7 +1303,7 @@ public class Main extends JavaPlugin implements Listener {
                 }
                 remaining--;
             }
-        }.runTaskTimer(this, 0L, 20L);
+        }.runTaskTimer(this, COUNTDOWN_INITIAL_DELAY_TICKS, TICKS_PER_SECOND);
     }
 
     /**
