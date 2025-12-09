@@ -111,6 +111,8 @@ public class Main extends JavaPlugin implements Listener {
     private boolean preGenerationCountdownEnabled = true;
     // When false, countdown messages are only sent to the command requester (if available); default true
     private boolean countdownBroadcastToAll = true;
+    // Path to server.properties file (configurable, default is "server.properties" in current directory)
+    private java.nio.file.Path serverPropertiesPath = java.nio.file.Paths.get("server.properties");
     // Optional UUID of the player who requested the last cycle; used to scope countdown messages when configured
     private volatile UUID lastCycleRequester = null;
     // Pending moves for players who are dead at move time; they will be moved on respawn
@@ -211,6 +213,9 @@ public class Main extends JavaPlugin implements Listener {
         delayBeforeGenerationSeconds = cfg.getInt("behavior.delay_before_generation_seconds", 3);
         waitForPlayersToLeaveSeconds = cfg.getInt("behavior.wait_for_players_to_leave_seconds", 30);
         preGenerationCountdownEnabled = cfg.getBoolean("behavior.pre_generation_countdown_enabled", true);
+        // Server properties path configuration (relative to server root directory)
+        String serverPropsPath = cfg.getString("server.properties_path", "server.properties");
+        serverPropertiesPath = java.nio.file.Paths.get(serverPropsPath);
         String httpBind = cfg.getString("server.http_bind", "");
         var rpcHandler = new RpcHandler(this, this, this.rpcSecret, RPC_CHANNEL);
         try {
@@ -417,6 +422,19 @@ public class Main extends JavaPlugin implements Listener {
     private void doGenerateWorld(int next) {
         String newWorldName = "hardcore_cycle_" + next;
         LOG.info("Generating world: " + newWorldName);
+        
+        // Update server.properties to set level-name to the new world name
+        // This ensures the correct world is loaded on server restart
+        try {
+            boolean updated = ServerPropertiesUtil.updateLevelName(serverPropertiesPath, newWorldName);
+            if (updated) {
+                LOG.info("Updated server.properties level-name to: " + newWorldName);
+            } else {
+                LOG.warning("Failed to update server.properties level-name; server restart may load wrong world.");
+            }
+        } catch (Exception e) {
+            LOG.warning("Error updating server.properties: " + e.getMessage() + "; server restart may load wrong world.");
+        }
         
         // Show title to all online players indicating new cycle is starting
         Component title = Component.text("CYCLE " + next, NamedTextColor.GREEN);
