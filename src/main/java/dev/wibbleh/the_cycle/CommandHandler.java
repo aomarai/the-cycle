@@ -34,6 +34,10 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
      * - setcycle <n>
      * - cycle-now
      * - status
+     * - info
+     * - reload
+     * - queue
+     * - players
      *
      * @param sender command sender
      * @param cmd    command object
@@ -51,7 +55,14 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         String name = cmd.getName();
         if (name.equalsIgnoreCase("cycle")) {
             if (args.length == 0) {
-                sender.sendMessage("Usage: /cycle setcycle <n> | /cycle cycle-now | /cycle status");
+                sender.sendMessage("Usage: /cycle <setcycle|cycle-now|status|info|reload|queue|players>");
+                sender.sendMessage("  setcycle <n>  - Set cycle number");
+                sender.sendMessage("  cycle-now     - Trigger immediate world cycle");
+                sender.sendMessage("  status        - Show current status");
+                sender.sendMessage("  info          - Show detailed server information");
+                sender.sendMessage("  reload        - Reload configuration");
+                sender.sendMessage("  queue         - Show RPC queue status");
+                sender.sendMessage("  players       - Show detailed player information");
                 return true;
             }
             if (args[0].equalsIgnoreCase("setcycle") && args.length == 2) {
@@ -94,9 +105,81 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             }
             if (args[0].equalsIgnoreCase("status")) {
                 if (plugin instanceof Main m) {
-                    sender.sendMessage("Cycle=" + m.getCycleNumber() + " playersOnline=" + Bukkit.getOnlinePlayers().size());
+                    String role = m.isHardcoreBackend() ? "hardcore" : "lobby";
+                    sender.sendMessage("§6=== TheCycle Status ===");
+                    sender.sendMessage("§eRole: §f" + role);
+                    sender.sendMessage("§eCycle: §f" + m.getCycleNumber());
+                    sender.sendMessage("§ePlayers Online: §f" + Bukkit.getOnlinePlayers().size());
+                    sender.sendMessage("§eAttempts Since Last Win: §f" + m.getAttemptsSinceLastWin());
+                    sender.sendMessage("§eTotal Wins: §f" + m.getTotalWins());
                 } else {
                     sender.sendMessage("Cycle=unknown");
+                }
+                return true;
+            }
+            if (args[0].equalsIgnoreCase("info")) {
+                if (!sender.hasPermission("thecycle.admin")) {
+                    sender.sendMessage("§cYou do not have permission to use that command.");
+                    return true;
+                }
+                if (plugin instanceof Main m) {
+                    sender.sendMessage("§6=== TheCycle Debug Info ===");
+                    sender.sendMessage("§eServer Role: §f" + (m.isHardcoreBackend() ? "hardcore" : "lobby"));
+                    sender.sendMessage("§eCycle Number: §f" + m.getCycleNumber());
+                    sender.sendMessage("§eAttempts: §f" + m.getAttemptsSinceLastWin());
+                    sender.sendMessage("§eTotal Wins: §f" + m.getTotalWins());
+                    sender.sendMessage("§ePlayers Online: §f" + Bukkit.getOnlinePlayers().size());
+                    sender.sendMessage("§eHardcore Server: §f" + m.getHardcoreServerName());
+                    sender.sendMessage("§eBukkit Version: §f" + Bukkit.getVersion());
+                    sender.sendMessage("§ePlugin Version: §f" + plugin.getDescription().getVersion());
+                } else {
+                    sender.sendMessage("§cPlugin information unavailable");
+                }
+                return true;
+            }
+            if (args[0].equalsIgnoreCase("reload")) {
+                if (!sender.hasPermission("thecycle.admin")) {
+                    sender.sendMessage("§cYou do not have permission to use that command.");
+                    return true;
+                }
+                plugin.reloadConfig();
+                sender.sendMessage("§aConfiguration reloaded successfully!");
+                sender.sendMessage("§eNote: Some settings require a server restart to take effect.");
+                return true;
+            }
+            if (args[0].equalsIgnoreCase("queue")) {
+                if (!sender.hasPermission("thecycle.admin")) {
+                    sender.sendMessage("§cYou do not have permission to use that command.");
+                    return true;
+                }
+                if (plugin instanceof Main m) {
+                    sender.sendMessage("§6=== RPC Queue Status ===");
+                    sender.sendMessage("§eOutbound Queue: §f" + m.getOutboundRpcQueueSize());
+                    sender.sendMessage("§ePersistent Queue: §f" + m.getPersistentRpcQueueSize());
+                    sender.sendMessage("§ePending Lobby Moves: §f" + m.getPendingLobbyMovesCount());
+                    sender.sendMessage("§ePending Hardcore Moves: §f" + m.getPendingHardcoreMovesCount());
+                } else {
+                    sender.sendMessage("§cQueue information unavailable");
+                }
+                return true;
+            }
+            if (args[0].equalsIgnoreCase("players")) {
+                if (!sender.hasPermission("thecycle.admin")) {
+                    sender.sendMessage("§cYou do not have permission to use that command.");
+                    return true;
+                }
+                if (plugin instanceof Main m) {
+                    sender.sendMessage("§6=== Player Information ===");
+                    sender.sendMessage("§ePlayers Online: §f" + Bukkit.getOnlinePlayers().size());
+                    if (!Bukkit.getOnlinePlayers().isEmpty()) {
+                        sender.sendMessage("§eOnline Players:");
+                        for (var p : Bukkit.getOnlinePlayers()) {
+                            String inCycle = m.isPlayerInCurrentCycle(p.getUniqueId()) ? "§a✓" : "§c✗";
+                            sender.sendMessage("  §f" + p.getName() + " §7(" + p.getWorld().getName() + ") " + inCycle);
+                        }
+                    }
+                } else {
+                    sender.sendMessage("§cPlayer information unavailable");
                 }
                 return true;
             }
@@ -118,7 +201,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command cmd, @NotNull String alias, @NotNull String[] args) {
         if (!cmd.getName().equalsIgnoreCase("cycle")) return Collections.emptyList();
         if (args.length == 1) {
-            var subs = Arrays.asList("setcycle", "cycle-now", "status");
+            var subs = Arrays.asList("setcycle", "cycle-now", "status", "info", "reload", "queue", "players");
             String partial = args[0].toLowerCase();
             return subs.stream()
                     .filter(s -> s.startsWith(partial))

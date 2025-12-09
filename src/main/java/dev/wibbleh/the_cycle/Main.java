@@ -1524,4 +1524,36 @@ public class Main extends JavaPlugin implements Listener {
     public void clearCycleStartPending() {
         cycleStartPending.set(false);
     }
+
+    /**
+     * Get the size of the outbound RPC queue.
+     * @return the number of queued outbound RPC messages
+     */
+    public synchronized int getOutboundRpcQueueSize() {
+        return outboundRpcQueue.size();
+    }
+
+    /**
+     * Get the size of the persistent RPC queue.
+     * @return the number of queued persistent RPC messages
+     */
+    public synchronized int getPersistentRpcQueueSize() {
+        return persistentRpcQueue.size();
+    }
+
+    /**
+     * Get the count of pending lobby moves.
+     * @return the number of pending lobby moves
+     */
+    public int getPendingLobbyMovesCount() {
+        return pendingLobbyMoves.size();
+    }
+
+    /**
+     * Get the count of pending hardcore moves.
+     * @return the number of pending hardcore moves
+     */
+    public int getPendingHardcoreMovesCount() {
+        return pendingHardcoreMoves.size();
+    }
 }
