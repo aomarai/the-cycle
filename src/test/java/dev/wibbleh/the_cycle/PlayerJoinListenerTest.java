@@ -71,9 +71,10 @@ class PlayerJoinListenerTest {
 
     @Test
     void testMidCycleJoinOnHardcoreMovesToLobby() {
-        // Setup - player joining hardcore during active cycle
+        // Setup - player joining hardcore during active cycle (other players already in cycle)
         when(mockPlugin.isHardcoreBackend()).thenReturn(true);
         when(mockPlugin.isPlayerInCurrentCycle(playerUuid)).thenReturn(false);
+        when(mockPlugin.hasPlayersInCurrentCycle()).thenReturn(true); // Other players already in cycle
         when(mockWorld.getName()).thenReturn("hardcore_cycle_5");
 
         try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
@@ -278,15 +279,19 @@ class PlayerJoinListenerTest {
                 return mockTask;
             });
 
-            // Execute - both players join
+            // Execute - first player joins (no one in cycle yet, so they're added)
+            when(mockPlugin.hasPlayersInCurrentCycle()).thenReturn(false); // No players yet
             listener.onPlayerJoin(mockJoinEvent);
             
+            // Execute - second player joins (now first player is in cycle, so second gets kicked)
+            when(mockPlugin.hasPlayersInCurrentCycle()).thenReturn(true); // First player now in cycle
             PlayerJoinEvent join2 = mock(PlayerJoinEvent.class);
             when(join2.getPlayer()).thenReturn(player2);
             listener.onPlayerJoin(join2);
 
-            // Verify both moved to lobby
-            verify(mockPlugin).sendPlayerToLobby(mockPlayer);
+            // Verify first player added to cycle, second player moved to lobby
+            verify(mockPlugin).addPlayerToCurrentCycle(playerUuid);
+            verify(mockPlugin, never()).sendPlayerToLobby(mockPlayer);
             verify(mockPlugin).sendPlayerToLobby(player2);
         }
     }

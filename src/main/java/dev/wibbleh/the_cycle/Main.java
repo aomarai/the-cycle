@@ -500,22 +500,13 @@ public class Main extends JavaPlugin implements Listener {
                 } catch (Exception ignored) {}
             });
             
-            // Unload and schedule deletion of previous world before restart
+            // Don't delete the previous world before restart - it will be cleaned up on next cycle
+            // Attempting to delete it now causes save errors during shutdown since the world
+            // is the current main world and cannot be properly unloaded before restart
             if (next > 1 && cfg.getBoolean("behavior.delete_previous_worlds", true)) {
                 String prevWorldName = "hardcore_cycle_" + (next - 1);
-                World prevWorld = Bukkit.getWorld(prevWorldName);
-                
-                // Unload the world first to avoid save errors during shutdown
-                if (prevWorld != null) {
-                    LOG.info("Unloading previous world before restart: " + prevWorldName);
-                    boolean unloaded = Bukkit.unloadWorld(prevWorld, false);
-                    if (!unloaded) {
-                        LOG.warning("Failed to unload world " + prevWorldName + " before restart.");
-                    }
-                }
-                
-                // Schedule deletion (will happen after unload or on next startup if deferred)
-                worldDeletionService.scheduleDeleteWorldFolder(prevWorldName);
+                LOG.info("Previous world " + prevWorldName + " will be cleaned up on next cycle.");
+                // Note: The world will be deleted during the NEXT cycle when it's no longer the main world
             }
             
             // Create marker file to indicate this is a cycle-triggered restart
@@ -529,7 +520,7 @@ public class Main extends JavaPlugin implements Listener {
                 LOG.warning("Failed to create cycle restart marker: " + e.getMessage());
             }
             
-            // Schedule server restart after a short delay to allow world unload and cleanup
+            // Schedule server restart after a short delay
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 LOG.info("Initiating server restart for new world generation...");
                 // Restart the server - this works with most server management scripts (like start.sh with restart loop)
@@ -1644,6 +1635,14 @@ public class Main extends JavaPlugin implements Listener {
      */
     public boolean isPlayerInCurrentCycle(UUID playerId) {
         return playersInCurrentCycle.contains(playerId);
+    }
+
+    /**
+     * Check if there are any players in the current cycle.
+     * Used to determine if a cycle is actively in progress.
+     */
+    public boolean hasPlayersInCurrentCycle() {
+        return !playersInCurrentCycle.isEmpty();
     }
 
     /**
