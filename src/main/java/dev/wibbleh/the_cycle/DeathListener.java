@@ -91,7 +91,13 @@ public class DeathListener implements Listener {
         var entry = new HashMap<String, Object>();
         entry.put("name", dead.getName());
         entry.put("time", Instant.now().toString());
-        entry.put("cause", ev.getDeathMessage());
+        // Get death message - the deprecated API returns a String
+        @SuppressWarnings("deprecation")
+        String deathCause = ev.getDeathMessage();
+        if (deathCause == null || deathCause.isEmpty()) {
+            deathCause = dead.getName() + " died";
+        }
+        entry.put("cause", deathCause);
         entry.put("location", dead.getLocation().getBlockX() + "," + dead.getLocation().getBlockY() + "," + dead.getLocation().getBlockZ());
 
         var drops = ev.getDrops().stream()
@@ -102,13 +108,14 @@ public class DeathListener implements Listener {
         deathRecap.add(entry);
 
         // Override vanilla death message to use our custom format
-        String deathReason = ev.getDeathMessage();
-        ev.deathMessage(Component.empty());  // Clear vanilla death message
+        @SuppressWarnings("deprecation")
+        String emptyMsg = "";
+        ev.setDeathMessage(emptyMsg);  // Clear vanilla death message
         
         // Send our custom death message with skulls and death reason to all players
         String deathMsg = "--------------------" + System.lineSeparator() + 
                           "☠ " + dead.getName() + " died ☠" + System.lineSeparator() + 
-                          deathReason + System.lineSeparator() +
+                          deathCause + System.lineSeparator() +
                           "--------------------";
         Component deathComponent = Component.text(deathMsg);
         Bukkit.getOnlinePlayers().forEach(p -> {

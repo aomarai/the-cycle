@@ -329,4 +329,65 @@ class DeathListenerTest {
             verify(mockSpigot, never()).respawn();
         }
     }
+
+    @Test
+    void testOnPlayerDeathOverridesVanillaDeathMessage() {
+        DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
+        
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            List<Player> onlinePlayers = Collections.singletonList(mockPlayer);
+            mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn(onlinePlayers);
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
+            
+            listener.onPlayerDeath(mockEvent);
+            
+            // Verify vanilla death message was cleared (set to empty string)
+            verify(mockEvent, times(1)).setDeathMessage("");
+        }
+    }
+
+    @Test
+    void testOnPlayerDeathIncludesDeathReasonInCustomMessage() {
+        DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
+        
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            List<Player> onlinePlayers = Collections.singletonList(mockPlayer);
+            mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn(onlinePlayers);
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
+            
+            listener.onPlayerDeath(mockEvent);
+            
+            // Verify custom message was sent to players
+            verify(mockPlayer, times(1)).sendMessage(any(Component.class));
+            
+            // Verify death recap includes the plain text death reason
+            assertEquals(1, deathRecap.size());
+            Map<String, Object> entry = deathRecap.get(0);
+            assertEquals("TestPlayer was slain", entry.get("cause"));
+        }
+    }
+
+    @Test
+    void testOnPlayerDeathHandlesNullDeathMessage() {
+        DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
+        
+        lenient().when(mockEvent.getDeathMessage()).thenReturn(null);
+        
+        try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
+            List<Player> onlinePlayers = Collections.singletonList(mockPlayer);
+            mockedBukkit.when(Bukkit::getOnlinePlayers).thenReturn(onlinePlayers);
+            mockedBukkit.when(Bukkit::getScheduler).thenReturn(mockScheduler);
+            lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
+            
+            // Should not throw exception even with null death message
+            assertDoesNotThrow(() -> listener.onPlayerDeath(mockEvent));
+            
+            // Verify death recap uses fallback message
+            assertEquals(1, deathRecap.size());
+            Map<String, Object> entry = deathRecap.get(0);
+            assertEquals("TestPlayer died", entry.get("cause"));
+        }
+    }
 }
