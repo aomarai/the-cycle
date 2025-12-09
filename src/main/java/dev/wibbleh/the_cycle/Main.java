@@ -606,13 +606,13 @@ public class Main extends JavaPlugin implements Listener {
             )
         );
         
-        Bukkit.getOnlinePlayers().forEach(p -> {
+        for (Player p : Bukkit.getOnlinePlayers()) {
             try {
                 p.showTitle(titleScreen);
             } catch (Exception e) {
                 LOG.warning("Failed to show cycle complete title to " + p.getName() + ": " + e.getMessage());
             }
-        });
+        }
     }
 
     /**
@@ -1162,6 +1162,13 @@ public class Main extends JavaPlugin implements Listener {
         targets.forEach(p -> { if (p != null) pendingLobbyMoves.add(p.getUniqueId()); });
         savePendingMovesAsync();
         final int total = seconds;
+        // Create static title component once outside the loop for reuse
+        final Component lobbyTitleStatic = Component.text("Returning to Lobby", NamedTextColor.YELLOW);
+        final Title.Times titleTimes = Title.Times.times(
+            Duration.ofMillis(0),     // fade in
+            Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
+            Duration.ofMillis(200)    // fade out
+        );
         new org.bukkit.scheduler.BukkitRunnable() {
              int remaining = total;
              @Override
@@ -1182,24 +1189,17 @@ public class Main extends JavaPlugin implements Listener {
                      cancel();
                       return;
                  }
-                // Show premium title countdown
+                // Show premium title countdown - create subtitle once per iteration
+                Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
+                Title titleScreen = Title.title(lobbyTitleStatic, subtitle, titleTimes);
+                Component actionBarMsg = Component.text("Lobby transfer in " + remaining + "s", NamedTextColor.GOLD);
+                
                 for (var p : targets) {
                     if (p == null) continue;
                     try {
-                        Component title = Component.text("Returning to Lobby", NamedTextColor.YELLOW);
-                        Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
-                        Title titleScreen = Title.title(
-                            title,
-                            subtitle,
-                            Title.Times.times(
-                                Duration.ofMillis(0),     // fade in
-                                Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
-                                Duration.ofMillis(200)    // fade out
-                            )
-                        );
                         p.showTitle(titleScreen);
                         // Also send action bar for less intrusive reminder
-                        p.sendActionBar(Component.text("Lobby transfer in " + remaining + "s", NamedTextColor.GOLD));
+                        p.sendActionBar(actionBarMsg);
                     } catch (Exception ignored) {}
                 }
                 remaining--;
@@ -1245,6 +1245,13 @@ public class Main extends JavaPlugin implements Listener {
         targets.forEach(p -> { if (p != null) pendingHardcoreMoves.add(p.getUniqueId()); });
         savePendingMovesAsync();
         final int total = seconds;
+        // Create static title component once outside the loop for reuse
+        final Component hardcoreTitleStatic = Component.text("Entering Hardcore", NamedTextColor.RED);
+        final Title.Times titleTimes = Title.Times.times(
+            Duration.ofMillis(0),     // fade in
+            Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
+            Duration.ofMillis(200)    // fade out
+        );
         new org.bukkit.scheduler.BukkitRunnable() {
             int remaining = total;
             @Override
@@ -1265,24 +1272,17 @@ public class Main extends JavaPlugin implements Listener {
                     cancel();
                      return;
                  }
-                // Show premium title countdown
+                // Show premium title countdown - create subtitle once per iteration
+                Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
+                Title titleScreen = Title.title(hardcoreTitleStatic, subtitle, titleTimes);
+                Component actionBarMsg = Component.text("Hardcore transfer in " + remaining + "s", NamedTextColor.GOLD);
+                
                 for (var p : targets) {
                     if (p == null) continue;
                     try {
-                        Component title = Component.text("Entering Hardcore", NamedTextColor.RED);
-                        Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
-                        Title titleScreen = Title.title(
-                            title,
-                            subtitle,
-                            Title.Times.times(
-                                Duration.ofMillis(0),     // fade in
-                                Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
-                                Duration.ofMillis(200)    // fade out
-                            )
-                        );
                         p.showTitle(titleScreen);
                         // Also send action bar for less intrusive reminder
-                        p.sendActionBar(Component.text("Hardcore transfer in " + remaining + "s", NamedTextColor.GOLD));
+                        p.sendActionBar(actionBarMsg);
                     } catch (Exception ignored) {}
                 }
                 remaining--;
