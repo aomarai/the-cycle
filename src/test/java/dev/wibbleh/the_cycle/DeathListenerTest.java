@@ -269,8 +269,12 @@ class DeathListenerTest {
     }
 
     @Test
-    void testOnPlayerDeathSwitchesToSpectatorMode() {
+    void testOnPlayerDeathSchedulesRespawn() {
         DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
+        
+        // Mock the player's spigot() to return a mock spigot player
+        Player.Spigot mockSpigot = mock(Player.Spigot.class);
+        when(mockPlayer.spigot()).thenReturn(mockSpigot);
         
         try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
             List<Player> onlinePlayers = Collections.singletonList(mockPlayer);
@@ -279,8 +283,8 @@ class DeathListenerTest {
             lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
             lenient().when(mockPlayer.isOnline()).thenReturn(true);
             
-            // Capture the runnable passed to runTask so we can execute it
-            when(mockScheduler.runTask(eq(mockPlugin), any(Runnable.class))).thenAnswer(invocation -> {
+            // Capture the runnable passed to runTaskLater so we can execute it
+            when(mockScheduler.runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L))).thenAnswer(invocation -> {
                 Runnable runnable = invocation.getArgument(1);
                 runnable.run();
                 return mockTask;
@@ -288,14 +292,20 @@ class DeathListenerTest {
             
             listener.onPlayerDeath(mockEvent);
             
-            // Verify that a task was scheduled to set the player's game mode (runner executed above)
-            verify(mockScheduler, times(1)).runTask(eq(mockPlugin), any(Runnable.class));
+            // Verify that a delayed task was scheduled to respawn the player
+            verify(mockScheduler, times(1)).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L));
+            // Verify that respawn was called
+            verify(mockSpigot, times(1)).respawn();
         }
     }
 
     @Test
-    void testOnPlayerDeathSkipsSpectatorModeIfPlayerOffline() {
+    void testOnPlayerDeathSkipsRespawnIfPlayerOffline() {
         DeathListener listener = new DeathListener(mockPlugin, false, false, aliveMap, deathRecap);
+        
+        // Mock the player's spigot() to return a mock spigot player
+        Player.Spigot mockSpigot = mock(Player.Spigot.class);
+        when(mockPlayer.spigot()).thenReturn(mockSpigot);
         
         try (MockedStatic<Bukkit> mockedBukkit = mockStatic(Bukkit.class)) {
             List<Player> onlinePlayers = Collections.singletonList(mockPlayer);
@@ -304,8 +314,8 @@ class DeathListenerTest {
             lenient().when(mockConfig.getBoolean("behavior.cycle_when_no_online_players", true)).thenReturn(true);
             lenient().when(mockPlayer.isOnline()).thenReturn(false);
             
-            // Capture the runnable passed to runTask so we can execute it
-            when(mockScheduler.runTask(eq(mockPlugin), any(Runnable.class))).thenAnswer(invocation -> {
+            // Capture the runnable passed to runTaskLater so we can execute it
+            when(mockScheduler.runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L))).thenAnswer(invocation -> {
                 Runnable runnable = invocation.getArgument(1);
                 runnable.run();
                 return mockTask;
@@ -313,8 +323,10 @@ class DeathListenerTest {
             
             listener.onPlayerDeath(mockEvent);
             
-            // Verify that the player's game mode was NOT set since they're offline
-            verify(mockScheduler, times(1)).runTask(eq(mockPlugin), any(Runnable.class));
+            // Verify that a delayed task was scheduled
+            verify(mockScheduler, times(1)).runTaskLater(eq(mockPlugin), any(Runnable.class), eq(60L));
+            // Verify that respawn was NOT called since player is offline
+            verify(mockSpigot, never()).respawn();
         }
     }
 }
