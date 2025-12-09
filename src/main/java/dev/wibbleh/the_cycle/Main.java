@@ -34,8 +34,8 @@ public class Main extends JavaPlugin implements Listener {
     private static final long CYCLE_COMPLETE_STAY_SECONDS = 2;
     private static final long CYCLE_COMPLETE_FADE_OUT_SECONDS = 1;
     private static final long COUNTDOWN_FADE_IN_MILLIS = 0;
-    private static final long COUNTDOWN_STAY_MILLIS = 1100;
-    private static final long COUNTDOWN_FADE_OUT_MILLIS = 200;
+    private static final long COUNTDOWN_STAY_MILLIS = 950;  // Stay for 950ms to ensure smooth transitions without overlap
+    private static final long COUNTDOWN_FADE_OUT_MILLIS = 50;  // Quick fade to next countdown
     private static final long CYCLE_START_FADE_IN_MILLIS = 500;
     private static final long CYCLE_START_STAY_SECONDS = 3;
     private static final long CYCLE_START_FADE_OUT_SECONDS = 1;
