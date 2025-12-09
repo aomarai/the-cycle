@@ -2,9 +2,6 @@ package dev.wibbleh.the_cycle;
 
 import org.bukkit.Bukkit;
 import org.bukkit.World;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
-import org.bukkit.boss.BossBar;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -47,8 +44,6 @@ public class Main extends JavaPlugin implements Listener {
     private final Set<UUID> playersInCurrentCycle = Collections.synchronizedSet(new HashSet<>());
     private FileConfiguration cfg;
     private boolean enableScoreboard;
-    private boolean enableBossBar;
-    private BossBar bossBar;
     private Objective objective;
     // Lobby configuration: either a server name for Bungee/Velocity or a world name on this server
     private String lobbyServer;
@@ -138,7 +133,6 @@ public class Main extends JavaPlugin implements Listener {
 
         enableScoreboard = cfg.getBoolean("features.scoreboard", true);
         boolean enableActionbarLocal = cfg.getBoolean("features.actionbar", true);
-        enableBossBar = cfg.getBoolean("features.bossbar", true);
         webhookUrl = cfg.getString("webhook.url", "");
         // lobby config
         lobbyServer = cfg.getString("lobby.server", "").trim();
@@ -234,10 +228,6 @@ public class Main extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(dl, this);
         getServer().getPluginManager().registerEvents(edl, this);
         getServer().getPluginManager().registerEvents(pjl, this);
-
-        if (enableBossBar) {
-            bossBar = Bukkit.createBossBar("Next world in progress...", BarColor.GREEN, BarStyle.SOLID);
-        }
 
         if (enableScoreboard) {
             var scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
@@ -491,7 +481,8 @@ public class Main extends JavaPlugin implements Listener {
             Bukkit.getOnlinePlayers().forEach(this::sendPlayerToLobby);
         }
 
-        pushBossbar("World cycled — welcome to cycle #" + next);
+        // Show premium title notification for world cycle completion
+        showWorldCycleCompleteTitle(next);
 
         LOG.info("Cycle " + next + " complete.");
     }
@@ -600,16 +591,27 @@ public class Main extends JavaPlugin implements Listener {
     }
 
     /**
-     * Update the boss bar title for all players if boss bar support is enabled.
-     *
-     * @param message message to display to players
+     * Show a premium title notification when a world cycle is complete.
      */
-    private void pushBossbar(String message) {
-        if (!enableBossBar || bossBar == null) return;
-        bossBar.setTitle(message);
-        // Add all online players to show
+    private void showWorldCycleCompleteTitle(int cycleNum) {
+        Component title = Component.text("CYCLE " + cycleNum, NamedTextColor.GOLD);
+        Component subtitle = Component.text("Ready to Play!", NamedTextColor.GREEN);
+        Title titleScreen = Title.title(
+            title,
+            subtitle,
+            Title.Times.times(
+                Duration.ofMillis(500),  // fade in
+                Duration.ofSeconds(2),    // stay
+                Duration.ofSeconds(1)     // fade out
+            )
+        );
+        
         Bukkit.getOnlinePlayers().forEach(p -> {
-            if (!bossBar.getPlayers().contains(p)) bossBar.addPlayer(p);
+            try {
+                p.showTitle(titleScreen);
+            } catch (Exception e) {
+                LOG.warning("Failed to show cycle complete title to " + p.getName() + ": " + e.getMessage());
+            }
         });
     }
 
@@ -1176,22 +1178,29 @@ public class Main extends JavaPlugin implements Listener {
                              sendPlayerToLobby(p);
                          }
                      }
-                     // cleanup UI/state
-                     if (enableBossBar && bossBar != null) {
-                         bossBar.removeAll();
-                     }
                      clearLastCycleRequester();
                      cancel();
                       return;
                  }
-                // Update bossbar and chat messages
-                if (enableBossBar && bossBar != null) {
-                    bossBar.setTitle("Returning to lobby in " + remaining + "s");
-                    Bukkit.getOnlinePlayers().forEach(pl -> { if (!bossBar.getPlayers().contains(pl)) bossBar.addPlayer(pl); });
-                }
+                // Show premium title countdown
                 for (var p : targets) {
                     if (p == null) continue;
-                    try { p.sendMessage("[HardcoreCycle] Sending you to the lobby in " + remaining + " second(s)..."); } catch (Exception ignored) {}
+                    try {
+                        Component title = Component.text("Returning to Lobby", NamedTextColor.YELLOW);
+                        Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
+                        Title titleScreen = Title.title(
+                            title,
+                            subtitle,
+                            Title.Times.times(
+                                Duration.ofMillis(0),     // fade in
+                                Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
+                                Duration.ofMillis(200)    // fade out
+                            )
+                        );
+                        p.showTitle(titleScreen);
+                        // Also send action bar for less intrusive reminder
+                        p.sendActionBar(Component.text("Lobby transfer in " + remaining + "s", NamedTextColor.GOLD));
+                    } catch (Exception ignored) {}
                 }
                 remaining--;
             }
@@ -1252,21 +1261,29 @@ public class Main extends JavaPlugin implements Listener {
                             sendPlayerToServer(p, target);
                         }
                     }
-                    // cleanup UI/state
-                    if (enableBossBar && bossBar != null) {
-                        bossBar.removeAll();
-                    }
                     clearLastCycleRequester();
                     cancel();
                      return;
                  }
-                // Update bossbar and chat messages
-                if (enableBossBar && bossBar != null) {
-                    bossBar.setTitle("Moving to hardcore in " + remaining + "s");
-                    Bukkit.getOnlinePlayers().forEach(pl -> { if (!bossBar.getPlayers().contains(pl)) bossBar.addPlayer(pl); });
-                }
+                // Show premium title countdown
                 for (var p : targets) {
-                    try { p.sendMessage("[HardcoreCycle] Moving you to hardcore server in " + remaining + " second(s)..."); } catch (Exception ignored) {}
+                    if (p == null) continue;
+                    try {
+                        Component title = Component.text("Entering Hardcore", NamedTextColor.RED);
+                        Component subtitle = Component.text(remaining + "s", NamedTextColor.WHITE);
+                        Title titleScreen = Title.title(
+                            title,
+                            subtitle,
+                            Title.Times.times(
+                                Duration.ofMillis(0),     // fade in
+                                Duration.ofMillis(1100),  // stay (slightly longer than 1s to avoid flicker)
+                                Duration.ofMillis(200)    // fade out
+                            )
+                        );
+                        p.showTitle(titleScreen);
+                        // Also send action bar for less intrusive reminder
+                        p.sendActionBar(Component.text("Hardcore transfer in " + remaining + "s", NamedTextColor.GOLD));
+                    } catch (Exception ignored) {}
                 }
                 remaining--;
             }
