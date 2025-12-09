@@ -81,7 +81,7 @@ public class DeathListener implements Listener {
 
         var drops = ev.getDrops().stream()
                 .map(i -> i.getType().name() + " x" + i.getAmount())
-                .collect(Collectors.toList());
+                .toList();
         entry.put("drops", drops);
 
         deathRecap.add(entry);

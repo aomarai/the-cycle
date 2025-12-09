@@ -16,7 +16,7 @@ import java.time.Duration;
  * Listener that handles ender dragon kills and updates the win/attempt tracking.
  */
 public class EnderDragonListener implements Listener {
-    private static final int TITLE_FADE_IN_MS = 500;
+    private static final int TITLE_FADE_IN_MILLIS = 500;
     private static final int TITLE_STAY_SECONDS = 5;
     private static final int TITLE_FADE_OUT_SECONDS = 1;
     private static final String SEPARATOR = "=".repeat(50);
@@ -53,7 +53,7 @@ public class EnderDragonListener implements Listener {
             title,
             subtitle,
             Title.Times.times(
-                Duration.ofMillis(TITLE_FADE_IN_MS),
+                Duration.ofMillis(TITLE_FADE_IN_MILLIS),
                 Duration.ofSeconds(TITLE_STAY_SECONDS),
                 Duration.ofSeconds(TITLE_FADE_OUT_SECONDS)
             )

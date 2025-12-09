@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Utility class for persisting and loading failed RPC messages to/from disk.
@@ -118,7 +119,7 @@ public final class RpcQueueStorage {
      * @return list of queued RPCs (may be empty if file doesn't exist or is invalid)
      */
     public static List<QueuedRpc> load(File file) {
-        if (file == null || !file.exists()) return List.of();
+        if (file == null || !file.exists()) return new ArrayList<>();
 
         try (var reader = new FileReader(file)) {
             Type listType = new TypeToken<List<QueuedRpcDto>>(){}.getType();
@@ -126,7 +127,7 @@ public final class RpcQueueStorage {
             
             if (dtos == null) {
                 LOG.warning("RPC queue file is empty or invalid; ignoring.");
-                return List.of();
+                return new ArrayList<>();
             }
 
             var result = dtos.stream()
@@ -148,13 +149,13 @@ public final class RpcQueueStorage {
                         }
                         return true;
                     })
-                    .toList();
+                    .collect(Collectors.toCollection(ArrayList::new));
             
             LOG.info("Loaded " + result.size() + " queued RPCs from " + file.getName());
             return result;
         } catch (Exception e) {
             LOG.warning("Failed to load RPC queue: " + e.getMessage());
-            return List.of();
+            return new ArrayList<>();
         }
     }
 }

@@ -28,13 +28,12 @@ import net.kyori.adventure.title.Title;
 
 public class Main extends JavaPlugin implements Listener {
     private static final Logger LOG = Logger.getLogger("HardcoreCycle");
-    private static final int DEFAULT_CYCLE_NUMBER = 1;
     private static final int RPC_QUEUE_DRAIN_INTERVAL_TICKS = 20;
     private static final int PERSISTENT_RPC_RETRY_INTERVAL_TICKS = 1200; // 60 seconds
     private static final int GRACE_PERIOD_TICKS = 60; // 3 seconds
     private static final int AUTO_START_DELAY_TICKS = 40; // 2 seconds
     
-    private final AtomicInteger cycleNumber = new AtomicInteger(DEFAULT_CYCLE_NUMBER);
+    private final AtomicInteger cycleNumber = new AtomicInteger(1);
     // Attempt counter: number of cycles attempted before beating Minecraft (killing ender dragon)
     private final AtomicInteger attemptsSinceLastWin = new AtomicInteger(0);
     // Total wins counter: number of times the ender dragon has been killed
@@ -74,11 +73,10 @@ public class Main extends JavaPlugin implements Listener {
     private static final String RPC_CHANNEL = "thecycle:rpc";
     private static final int MAX_RPC_QUEUE = 100;
     private static final int MAX_PERSISTENT_RPC_QUEUE = 100;
-    private static final int INVALID_TASK_ID = -1;
     
     // Outbound RPC queue used when the Bungee outgoing channel isn't available yet.
     private final Deque<byte[]> outboundRpcQueue = new ArrayDeque<>();
-    private int rpcQueueTaskId = INVALID_TASK_ID;
+    private int rpcQueueTaskId = -1;
  // Webhook
      private String webhookUrl;
      private WorldDeletionService worldDeletionService;
@@ -111,7 +109,7 @@ public class Main extends JavaPlugin implements Listener {
     // Persistent queue for failed RPC messages (survives restarts)
     private final List<RpcQueueStorage.QueuedRpc> persistentRpcQueue = Collections.synchronizedList(new ArrayList<>());
     // Task ID for periodic RPC retry task
-    private int persistentRpcRetryTaskId = INVALID_TASK_ID;
+    private int persistentRpcRetryTaskId = -1;
 
     /**
      * Plugin enable lifecycle method. Loads configuration, wires helper services,
@@ -230,7 +228,7 @@ public class Main extends JavaPlugin implements Listener {
         loadPersistentRpcQueue();
 
         // Schedule a periodic task to try to drain the outbound RPC queue (runs on main thread)
-        if (rpcQueueTaskId == INVALID_TASK_ID) {
+        if (rpcQueueTaskId == -1) {
             rpcQueueTaskId = Bukkit.getScheduler().runTaskTimer(this, this::drainRpcQueue, RPC_QUEUE_DRAIN_INTERVAL_TICKS, RPC_QUEUE_DRAIN_INTERVAL_TICKS).getTaskId();
         }
 
@@ -997,7 +995,7 @@ public class Main extends JavaPlugin implements Listener {
      */
     private void schedulePeriodicRpcRetry() {
         // Cancel existing task if any
-        if (persistentRpcRetryTaskId != INVALID_TASK_ID) {
+        if (persistentRpcRetryTaskId != -1) {
             Bukkit.getScheduler().cancelTask(persistentRpcRetryTaskId);
             LOG.info("Cancelled existing RPC retry task.");
         }

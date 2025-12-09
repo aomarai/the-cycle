@@ -8,12 +8,10 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 /**
  * Simple command handler that provides a minimal interface for the /cycle command.
@@ -95,9 +93,11 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 return true;
             }
             if (args[0].equalsIgnoreCase("status")) {
-                if (plugin instanceof Main m)
+                if (plugin instanceof Main m) {
                     sender.sendMessage("Cycle=" + m.getCycleNumber() + " playersOnline=" + Bukkit.getOnlinePlayers().size());
-                else sender.sendMessage("Cycle=unknown");
+                } else {
+                    sender.sendMessage("Cycle=unknown");
+                }
                 return true;
             }
         }
@@ -122,7 +122,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             String partial = args[0].toLowerCase();
             return subs.stream()
                     .filter(s -> s.startsWith(partial))
-                    .collect(Collectors.toList());
+                    .toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("setcycle")) {
             // Suggest a few nearby numbers based on current cycle (if available)
