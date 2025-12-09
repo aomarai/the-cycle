@@ -31,11 +31,22 @@ All configuration options live in `plugins/HardcoreCycle/config.yml` (created fr
 - `server.lobby_http_url`: (optional) full URL to post world-ready notifications to the lobby.
 - `server.randomize_seed` (default `true`): when `true`, each new hardcore world receives a new random seed.
 - `server.seed` (default `0`): if `randomize_seed` is `false` and this is non-zero, the configured seed will be used for world creation.
+- `server.properties_path` (default `"server.properties"`): path to the server.properties file. The plugin automatically updates the `level-name` property to ensure the correct cycle world is loaded on server restart.
 - `lobby.server` and `lobby.world`: where to send players when the hardcore world is unavailable.
+
+### Important: Server Properties Integration
+
+The plugin automatically updates your `server.properties` file to set `level-name` to the current cycle world (e.g., `hardcore_cycle_1`, `hardcore_cycle_2`, etc.). This ensures:
+- Each server restart loads the correct cycle world
+- New random seeds are properly applied to new worlds
+- Old cycle worlds are properly replaced
+
+**Note:** If you manually set `level-name=default_world` in `server.properties`, the same world will be reused. The plugin automatically manages this setting for you.
 
 ### Safety
 - World deletion is constrained to the server's world folder; the plugin will not delete paths outside the server directory.
 - Deletion can be asynchronous or deferred until restart. See `behavior.defer_delete_until_restart` and `behavior.async_delete`.
+- The plugin creates a backup (`server.properties.backup`) before modifying your `server.properties` file.
 
 ## Usage
 
